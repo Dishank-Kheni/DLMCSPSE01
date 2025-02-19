@@ -1,0 +1,27 @@
+{
+  "name": "backend_skillsession",
+  "version": "1.0.0",
+  "description": "Essential all lamda functions which handles the whole SkillSession app by following serverless architecture.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dishank-Kheni/SkillSession.git"
+  },
+  "keywords": [
+    "SkillSession",
+    "serverless",
+    "aws",
+    "lamda",
+    "cloud",
+    "formation"
+  ],
+  "author": "Dishan Kheni",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Dishank-Kheni/SkillSession/issues"
+  },
+  "homepage": "https://github.com/Dishank-Kheni/SkillSession#readme"
+}
