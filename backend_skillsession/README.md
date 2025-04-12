@@ -45,7 +45,7 @@
 | `student_id`       | String | Foreign key to students table  |
 | `slot_id`          | String | Foreign key to slots table     |
 | `booking_status`   | String | Status of the booking          |
-| `request_creation` | String | When the booking was requested |
+| `request_created_at` | String | When the booking was requested |
 | `booking_date`     | String | Date of the booking            |
 
 ### `slots`
