@@ -1,0 +1,4 @@
+# file initiation
+# This file contains the resources for the backend of the cloud application
+# It includes the database, storage, and other resources needed for the application to run
+# The resources are defined in a YAML format
