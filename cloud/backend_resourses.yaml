@@ -5,30 +5,42 @@ Parameters:
     MinLength: 3
     MaxLength: 63
     AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
-    Description: Enter a string. Must be alpha numeric 3-63 in length.
-    Default: unitedtutoringusers # Name of the Cognito User Pool Domain
+    Description: Cognito User Pool domain prefix
+    Default: skillsessionusers # Name of the Cognito User Pool Domain
 
   region:
     Type: String
+    Description: AWS region for all resources
     Default: eu-north-1 # Region of the resources
-  BucketName:
+
+  LambdaCodeBucketName:
     Type: String
-    Default: united-tutoring-lambda # Name o f the S3 bucket where the lambda code is stored
-  PDynamoDBAvailability: # Name of the DynamoDB table for availability
+    Description: S3 bucket holding Lambda deployment packages
+    Default: skill-session-lambda # Name of the S3 bucket where the lambda code is stored
+
+  AvailabilityTableName: # Name of the DynamoDB table for availability
     Type: String
+    Description: Name of the DynamoDB table for tutor availability
     Default: availability
-  PDynamoDBBookingDetails: # Name of the DynamoDB table for booking details
+
+  BookingDetailsTableName: # Name of the DynamoDB table for booking details
     Type: String
+    Description: Name of the DynamoDB table for booking details
     Default: bookingdetails
-  PDynamoDBSlots: # Name of the DynamoDB table for slots
+
+  SlotsTableName: # Name of the DynamoDB table for slots
     Type: String
+    Description: Name of the DynamoDB table for individual time slots
     Default: slots
-  PDynamoDBStudentDetails: # Name of the DynamoDB table for student details
+
+  StudentDetailsTableName: # Name of the DynamoDB table for student details
     Type: String
     Default: student-details
-  PDynamoDBTutorDetails: # Name of the DynamoDB table for tutor details
+
+  TutorDetailsTableName: # Name of the DynamoDB table for tutor details
     Type: String
     Default: tutor-details
+
   PLambdaCronJob: # Name of the Lambda function for cron job
     Type: String
     Default: united-tutoring-cronjob
