@@ -18,68 +18,64 @@ Parameters:
     Description: S3 bucket holding Lambda deployment packages
     Default: skill-session-lambda # Name of the S3 bucket where the lambda code is stored
 
-  AvailabilityTableName: # Name of the DynamoDB table for availability
+  StudentTableName: # Name of the DynamoDB table for student details
     Type: String
-    Description: Name of the DynamoDB table for tutor availability
-    Default: availability
-
-  BookingDetailsTableName: # Name of the DynamoDB table for booking details
-    Type: String
-    Description: Name of the DynamoDB table for booking details
-    Default: bookingdetails
-
+    Default: student
   SlotsTableName: # Name of the DynamoDB table for slots
     Type: String
     Description: Name of the DynamoDB table for individual time slots
     Default: slots
+  TeacherTableName: # Name of the DynamoDB table for teacher details
+    Type: String
+    Default: teacher
+  AvailabilityTableName: # Name of the DynamoDB table for availability
+    Type: String
+    Description: Name of the DynamoDB table for tutor availability
+    Default: availability
+  BookingTableName: # Name of the DynamoDB table for booking details
+    Type: String
+    Description: Name of the DynamoDB table for booking details
+    Default: bookings
 
-  StudentDetailsTableName: # Name of the DynamoDB table for student details
+  LambdaExpireSlotsCronJob: # Name of the Lambda function for cron job
     Type: String
-    Default: student-details
-
-  TutorDetailsTableName: # Name of the DynamoDB table for tutor details
+    Default: expire_slots_cronjob
+  LambdaGetTeacherSlotDetails: # Name of the Lambda function for get slot details
     Type: String
-    Default: tutor-details
-
-  PLambdaCronJob: # Name of the Lambda function for cron job
+    Default: get_teacher_slots_handler
+  LambdaCreateTeacherAvailability: # Name of the Lambda function for save availability
     Type: String
-    Default: united-tutoring-cronjob
-  PLambdaGetSlotDetails: # Name of the Lambda function for get slot details
+    Default: create_teacher_availability_handler
+  LambdaGetPendingBookingSlots: # Name of the Lambda function for get booking slot in pending
     Type: String
-    Default: united-tutoring-getslotdetails
-  PLambdaSaveAvailability: # Name of the Lambda function for save availability
+    Default: get_pending_booking_slots_handler
+  LambdaGetProfileImageURL: # Name of the Lambda function for get profile image
     Type: String
-    Default: united-tutoring-save-availability
-  PLambdaGetBookingSlotInPending: # Name of the Lambda function for get booking slot in pending
+    Default: get_profile_image_url_handler
+  LambdaUploadProfileImage: # Name of the Lambda function for save profile image
     Type: String
-    Default: united-tutoring-getBookingSlotInPending
-  PLambdaGetProfileImg: # Name of the Lambda function for get profile image
+    Default: upload_profile_image_handler
+  LambdaManageUserProfiles: # Name of the Lambda function for save user details
     Type: String
-    Default: united-tutoring-get-profile-img
-  PLambdaSaveProfileImg: # Name of the Lambda function for save profile image
+    Default: manage_user_profiles_handler
+  LambdaProcessBookingResponse: # Name of the Lambda function for update request
     Type: String
-    Default: united-tutoring-save-profile-img
-  PLambdasSaveUserDetails: # Name of the Lambda function for save user details
+    Default: process_booking_response_handler
+  LambdaGetTeacherBookings: # Name of the Lambda function for get tutor bookings
     Type: String
-    Default: united-tutoring-save-user-details
-  PLambdaUpdateRequest: # Name of the Lambda function for update request
+    Default: get_teacher_bookings_handler
+  LambdaSubscribeEmailNotification: # Name of the Lambda function for subscribe for email notification
     Type: String
-    Default: united-tutoring-updateRequest
-  PLambdaGetTutorBookings: # Name of the Lambda function for get tutor bookings
+    Default: subscribe_email_notifications_handler
+  LambdaGetUserProfilesAndTeacherSearch: # Name of the Lambda function for get user details
     Type: String
-    Default: united-tutoring-get-tutor-bookings
-  PLambdaSubscribeForEmailNotification: # Name of the Lambda function for subscribe for email notification
+    Default: get_user_profiles_and_teacher_search_handler
+  LambdaCreateBookingRequest: # Name of the Lambda function for save booking details
     Type: String
-    Default: united-tutoring-subscribeForEmailNotification
-  PLambdaGetUserDetails: # Name of the Lambda function for get user details
+    Default: create_booking_request_handler
+  CronJobRule: # Name of the EventBridge Rule for cron job
     Type: String
-    Default: united-tutoring-get-user-details
-  PLambdaSaveBookingDetails: # Name of the Lambda function for save booking details
-    Type: String
-    Default: united-tutoring-savebookingdetails
-  PCronJobRule: # Name of the EventBridge Rule for cron job
-    Type: String
-    Default: united-tutoring-cron-job-rule
+    Default: cron-job-rule
 
 Resources: # Resources to be created
   UserPool: # Cognito User Pool
@@ -160,7 +156,7 @@ Resources: # Resources to be created
   LambdaCronJob: # Lambda function for cron job
     Type: AWS::Lambda::Function # Type of resource
     Properties: # Properties of the resource
-      FunctionName: !Ref PLambdaCronJob # Name of the function
+      FunctionName: !Ref LambdaCronJob # Name of the function
       Handler: index.handler # Handler of the function
       Role: arn:aws:iam::835032380954:role/cronjob-role # Role of the function
       Code: # Code of the function
