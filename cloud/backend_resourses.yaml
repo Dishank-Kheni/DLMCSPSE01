@@ -1,105 +1,225 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: "2010-09-09"  # CloudFormation template version
+
+# ===== TEMPLATE PARAMETERS =====
 Parameters:
-  CognitoDomain:
+  # Application parameters
+  AppPrefix:
+    Type: String
+    Default: skill-session
+    Description: Prefix for naming resources
+  
+  # Region parameters
+  AwsRegion:
+    Type: String
+    Description: AWS region for all resources
+    Default: eu-north-1  # Default region (Stockholm)
+
+  # Storage parameters
+  CodeBucketName:
+    Type: String
+    Description: S3 bucket holding Lambda deployment packages
+    Default: skill-session-lambda  # S3 bucket name for Lambda code
+
+  # Authentication parameters  
+  AuthDomainPrefix:
     Type: String
     MinLength: 3
     MaxLength: 63
     AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
     Description: Cognito User Pool domain prefix
-    Default: skillsessionusers # Name of the Cognito User Pool Domain
+    Default: skillsessionusers
 
-  region:
+  # Database table parameters
+  TableNameStudentProfiles:
     Type: String
-    Description: AWS region for all resources
-    Default: eu-north-1 # Region of the resources
-
-  LambdaCodeBucket:
+    Default: student-profiles
+    Description: Table for student profile information
+    
+  TableNameTeacherProfiles:
     Type: String
-    Description: S3 bucket holding Lambda deployment packages
-    Default: skill-session-lambda # Name of the S3 bucket where the lambda code is stored
-
-  StudentTableName: # Name of the DynamoDB table for student details
-    Type: String
-    Default: student
-  SlotsTableName: # Name of the DynamoDB table for slots
-    Type: String
-    Description: Name of the DynamoDB table for individual time slots
-    Default: slots
-  TeacherTableName: # Name of the DynamoDB table for teacher details
-    Type: String
-    Default: teacher
-  AvailabilityTableName: # Name of the DynamoDB table for availability
+    Default: teacher-profiles
+    Description: Table for teacher profile information
+    
+  TableNameAvailability:
     Type: String
     Description: Name of the DynamoDB table for tutor availability
-    Default: availability
-  BookingTableName: # Name of the DynamoDB table for booking details
+    Default: teacher-availability
+    
+  TableNameTimeSlots:
+    Type: String
+    Description: Name of the DynamoDB table for individual time slots
+    Default: time-slots
+    
+  TableNameBookings:
     Type: String
     Description: Name of the DynamoDB table for booking details
-    Default: bookings
+    Default: session-bookings
 
-  LambdaExpireSlotsCronJob: # Name of the Lambda function for cron job
+  # Lambda function parameters
+  FunctionNameExpireSlots:
     Type: String
-    Default: expire_slots_cronjob
-  LambdaGetTeacherSlots: # Name of the Lambda function for get slot details
+    Default: expire-slots-cronjob
+    Description: Function to clean up expired time slots
+    
+  FunctionNameGetTeacherSlots:
     Type: String
-    Default: get_teacher_slots_handler
-  LambdaCreateTeacherAvailability: # Name of the Lambda function for save availability
+    Default: get-teacher-slots
+    Description: Function to retrieve teacher availability slots  
+    
+  FunctionNameCreateTeacherAvailability:
     Type: String
-    Default: create_teacher_availability_handler
-  LambdaGetPendingBookingSlots: # Name of the Lambda function for get booking slot in pending
+    Default: create-teacher-availability
+    Description: Function to create teacher availability windows
+    
+  FunctionNameGetPendingBookingSlots:
     Type: String
-    Default: get_pending_booking_slots_handler
-  LambdaGetProfileImageURL: # Name of the Lambda function for get profile image
+    Default: get-pending-booking-slots
+    Description: Function to get slots awaiting booking confirmation
+    
+  FunctionNameGetProfileImageURL:
     Type: String
-    Default: get_profile_image_url_handler
-  LambdaUploadProfileImage: # Name of the Lambda function for save profile image
+    Default: get-profile-image-url
+    Description: Function to get profile image URLs
+    
+  FunctionNameUploadProfileImage:
     Type: String
-    Default: upload_profile_image_handler
-  LambdaManageUserProfiles: # Name of the Lambda function for save user details
+    Default: upload-profile-image
+    Description: Function to upload profile images
+    
+  FunctionNameManageUserProfiles:
     Type: String
-    Default: manage_user_profiles_handler
-  LambdaProcessBookingResponse: # Name of the Lambda function for update request
+    Default: manage-user-profiles
+    Description: Function to manage user profile data
+    
+  FunctionNameProcessBookingResponse:
     Type: String
-    Default: process_booking_response_handler
-  LambdaGetTeacherBookings: # Name of the Lambda function for get tutor bookings
+    Default: process-booking-response
+    Description: Function to process booking confirmations
+    
+  FunctionNameGetTeacherBookings:
     Type: String
-    Default: get_teacher_bookings_handler
-  LambdaSubscribeEmailNotification: # Name of the Lambda function for subscribe for email notification
+    Default: get-teacher-bookings
+    Description: Function to get a teacher's booked sessions
+    
+  FunctionNameSubscribeEmailNotification:
     Type: String
-    Default: subscribe_email_notifications_handler
-  LambdaGetUserProfilesAndTeacherSearch: # Name of the Lambda function for get user details
+    Default: subscribe-email-notifications
+    Description: Function to manage email subscriptions
+    
+  FunctionNameGetUserProfilesAndTeacherSearch:
     Type: String
-    Default: get_user_profiles_and_teacher_search_handler
-  LambdaCreateBookingRequest: # Name of the Lambda function for save booking details
+    Default: get-user-profiles-and-teacher-search
+    Description: Function for user profiles and teacher search
+    
+  FunctionNameCreateBookingRequest:
     Type: String
-    Default: create_booking_request_handler
-  SSCronJobRule: # Name of the EventBridge Rule for cron job
-    Type: String
-    Default: cron-job-rule
+    Default: create-booking-request
+    Description: Function to create a new booking request
 
-Resources: # Resources to be created
-  CognitoUserPool: # Cognito User Pool
-    Type: "AWS::Cognito::UserPool" # Type of resource
+  ScheduledJobRuleName:
+    Type: String
+    Default: expire-slots-scheduler
+    Description: Name for the scheduled EventBridge rule
 
-    Properties: # Properties of the resource
-      UsernameConfiguration: # Username configuration
-        CaseSensitive: false # Username is not case sensitive
-      Schema: # Schema of the user pool
+# ===== RESOURCES SECTION =====
+Resources:
+  # ===== DATABASE RESOURCES =====
+  
+  # Database tables first as they're foundational
+  TableStudentProfiles:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "id"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+      TableName: !Ref TableNameStudentProfiles
+
+  TableTeacherProfiles:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "id"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+      TableName: !Ref TableNameTeacherProfiles
+
+  TableAvailability:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "id"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+      TableName: !Ref TableNameAvailability
+
+  TableTimeSlots:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "id"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+      TableName: !Ref TableNameTimeSlots
+
+  TableBookings:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "bookingId"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "bookingId"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+      TableName: !Ref TableNameBookings
+
+  # ===== AUTHENTICATION RESOURCES =====
+  
+  # User Pool for authentication and user management
+  UserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UsernameConfiguration:
+        CaseSensitive: false  # Usernames are not case sensitive
+      Schema:  # User attributes schema definition
         - Name: first_name
-          AttributeDataType: String
-          DeveloperOnlyAttribute: false
-          Mutable: true # Attribute can be changed
-          Required: true # Attribute is required
-          StringAttributeConstraints:
-            MinLength: "0"
-            MaxLength: "2048"
-        - Name: last_name # Attribute name
           AttributeDataType: String
           DeveloperOnlyAttribute: false
           Mutable: true
           Required: true
           StringAttributeConstraints:
-            MinLength: "0"
+            MinLength: "1"
+            MaxLength: "2048"
+        - Name: last_name
+          AttributeDataType: String
+          DeveloperOnlyAttribute: false
+          Mutable: true
+          Required: true
+          StringAttributeConstraints:
+            MinLength: "1"
             MaxLength: "2048"
         - Name: email
           AttributeDataType: String
@@ -107,7 +227,7 @@ Resources: # Resources to be created
           Mutable: true
           Required: true
           StringAttributeConstraints:
-            MinLength: "0"
+            MinLength: "5"
             MaxLength: "2048"
         - Name: phone_number
           AttributeDataType: String
@@ -115,107 +235,204 @@ Resources: # Resources to be created
           Mutable: true
           Required: true
           StringAttributeConstraints:
-            MinLength: "0"
+            MinLength: "7"
             MaxLength: "2048"
-        - Name: userType
+        - Name: custom:userRole
           AttributeDataType: String
           DeveloperOnlyAttribute: false
           Mutable: true
           Required: false
           StringAttributeConstraints:
-            MinLength: "0"
-            MaxLength: "2048"
+            MinLength: "1"
+            MaxLength: "256"
       AutoVerifiedAttributes:
-        - email
-      UserPoolName: !Sub ${CognitoDomain}-user-pool # Name of the user pool
+        - email  # Email is auto-verified on signup
+      UserPoolName: !Sub ${AppPrefix}-user-pool
       VerificationMessageTemplate:
-        DefaultEmailOption: CONFIRM_WITH_CODE # Default email option
+        DefaultEmailOption: CONFIRM_WITH_CODE
 
-  CognitoUserPoolClient: # Cognito App Client
-    Type: AWS::Cognito::CognitoUserPoolClient # Type of resource
+  # App client for frontend application
+  UserPoolClient:
+    Type: AWS::Cognito::CognitoUserPoolClient
     Properties:
-      UserPoolId: !Ref CognitoUserPool # Reference to the user pool
-      AllowedOAuthFlowsUserPoolClient: true # OAuth flow is enabled
-      GenerateSecret: false
+      UserPoolId: !Ref UserPool
+      AllowedOAuthFlowsUserPoolClient: true
+      GenerateSecret: false  # No client secret for SPA
       CallbackURLs:
-        - http://localhost:3000 # Callback URL
-      AllowedOAuthFlows: # OAuth flows enabled
-        - code # Authorization code grant flow
-        - implicit # Implicit grant flow
-      AllowedOAuthScopes: # OAuth scopes enabled
-        - openid # OpenID Connect scope
-      SupportedIdentityProviders: # Identity providers supported
-        - COGNITO # Cognito user pool
+        - http://localhost:3000
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - openid
+      SupportedIdentityProviders:
+        - COGNITO
 
-  CognitoUserPoolDomain: # Cognito User Pool Domain
-    Type: AWS::Cognito::CognitoUserPoolDomain # Type of resource
-    Properties: # Properties of the resource
-      Domain: !Ref CognitoDomain # Name of the domain
-      UserPoolId: !Ref CognitoUserPool # Reference to the user pool
+  # Domain for hosted UI
+  UserPoolDomain:
+    Type: AWS::Cognito::CognitoUserPoolDomain
+    Properties:
+      Domain: !Ref AuthDomainPrefix
+      UserPoolId: !Ref UserPool
 
-  LambdaCronJob: # Lambda function for cron job
-    Type: AWS::Lambda::Function # Type of resource
-    Properties: # Properties of the resource
-      FunctionName: !Ref LambdaCronJob # Name of the function
-      Handler: index.handler # Handler of the function
-      Role: arn:aws:iam::8350
-      32380954:role/cronjob-role # Role of the function
-      Code: # Code of the function
-        S3Bucket: !Ref LambdaCodeBucket # Reference to the S3 bucket
-        S3Key: cronjob.zip # Name of the zip file
-      Runtime: nodejs20.x # Runtime of the function
-      Timeout: 5 # Timeout of the function
-      TracingConfig: # Tracing configuration of the function
-        Mode: Active # Tracing is enabled
+  # ===== API GATEWAY =====
+  
+  # Main REST API for all endpoints
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${AppPrefix}-api
+      Description: "Skill Session APIs - Tutoring platform backend"
 
-  LambdaGetTeacherSlots:
+  # Cognito authorizer for protected endpoints
+  ApiAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      IdentitySource: method.request.header.authorization
+      Name: CognitoAuthorizer
+      ProviderARNs:
+        - !GetAtt UserPool.Arn
+      RestApiId: !Ref ApiGateway
+      Type: COGNITO_USER_POOLS
+
+  # ===== LAMBDA FUNCTIONS =====
+
+  # Scheduled task to expire old slots
+  FunctionExpireSlots:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaGetSlotDetails
+      FunctionName: !Ref FunctionNameExpireSlots
+      Handler: index.handler
+      Role: arn:aws:iam::835032380954:role/cronjob-role
+      Code:
+        S3Bucket: !Ref CodeBucketName
+        S3Key: cronjob.zip
+      Runtime: nodejs20.x
+      Timeout: 5
+      TracingConfig:
+        Mode: Active
+
+  # Gets teacher availability slots
+  FunctionGetTeacherSlots:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionNameGetTeacherSlots
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref LambdaCodeBucket
+        S3Bucket: !Ref CodeBucketName
         S3Key: get_teacher_slots_handler.zip
       Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaGetTeacherSlotsPermission: # Permission for the lambda function
-    Type: "AWS::Lambda::Permission" # Type of resource
-    Properties: # Properties of the resource
-      Action: "lambda:invokeFunction" # Action to be performed
-      FunctionName: # Reference to the lambda function
-        "Fn::GetAtt": # Reference to the lambda function
-          - LambdaGetTeacherSlots # Name of the lambda function
-          - Arn # ARN of the lambda function
-      Principal: apigateway.amazonaws.com # Principal of the permission
-      SourceArn: # ARN of the source
-        "Fn::Join": # Join the strings
-          - "" # Joining character
-          - - "arn:aws:execute-api:" # ARN of the API gateway
-            - Ref: "AWS::Region" # Region of the API gateway
-            - ":" # ARN of the API gateway
-            - Ref: "AWS::AccountId" # Account ID of the API gateway
-            - ":" # ARN of the API gateway
-            - Ref: SkillSessionAPIs # Reference to the API gateway
-            - /*/POST/get-teacher-slots # ARN of the API gateway
-
-  LambdaCreateTeacherAvailability:
+  # Creates teacher availability windows
+  FunctionCreateTeacherAvailability:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref LambdaCreateTeacherAvailability
+      FunctionName: !Ref FunctionNameCreateTeacherAvailability
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref LambdaCodeBucket
+        S3Bucket: !Ref CodeBucketName
         S3Key: create_teacher_availability_handler.zip
       Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
+  # Gets pending booking slots
+  FunctionGetPendingBookingSlots:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionNameGetPendingBookingSlots
+      Handler: index.handler
+      Role: arn:aws:iam::835032380954:role/role-dynamodb
+      Code:
+        S3Bucket: !Ref CodeBucketName
+        S3Key: getBookingSlotInPending.zip
+      Runtime: nodejs20.x
+      Timeout: 5
+      TracingConfig:
+        Mode: Active
+
+  # Gets profile image URLs from S3
+  FunctionGetProfileImageURL:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionNameGetProfileImageURL
+      Handler: index.handler
+      Role: arn:aws:iam::835032380954:role/role-s3  # Role with S3 permissions
+      Code:
+        S3Bucket: !Ref CodeBucketName
+        S3Key: get_profile_image_url_handler.zip
+      Runtime: nodejs20.x
+      Timeout: 5
+      TracingConfig:
+        Mode: Active
+
+  # Uploads profile images to S3
+  FunctionUploadProfileImage:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionNameUploadProfileImage
+      Handler: index.handler
+      Role: arn:aws:iam::835032380954:role/role-s3  # S3 write permissions
+      Code:
+        S3Bucket: !Ref CodeBucketName
+        S3Key: upload_profile_image_handler.zip
+      Runtime: nodejs20.x
+      Timeout: 5
+      TracingConfig:
+        Mode: Active
+
+  # User profile management
+  FunctionManageUserProfiles:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref FunctionNameManageUserProfiles
+      Handler: index.handler
+      Role: arn:aws:iam::835032380954:role/role-dynamodb
+      Code:
+        S3Bucket: !Ref CodeBucketName
+        S3Key: manage_user_profiles_handler.zip
+      Runtime: nodejs20.x
+      Timeout: 5
+      TracingConfig:
+        Mode: Active
+
+  # Permission for EventBridge to invoke Lambda
+  PermissionCronJobInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt FunctionExpireSlots.Arn
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ScheduledJobRule.Arn
+
+  # API Gateway permission for Lambda
+  LambdaGetTeacherSlotsPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:invokeFunction"  # Permission to invoke function
+      FunctionName:
+        "Fn::GetAtt":
+          - LambdaGetTeacherSlots
+          - Arn
+      Principal: apigateway.amazonaws.com  # API Gateway is the invoker
+      SourceArn:  # Resource path ARN pattern
+        "Fn::Join":
+          - ""
+          - - "arn:aws:execute-api:"
+            - Ref: "AWS::Region"
+            - ":":
+            - Ref: "AWS::AccountId"
+            - ":":
+            - Ref: SkillSessionAPIs
+            - "/*/POST/get-teacher-slots"  # Added leading slash for proper ARN format
+
+  # Permission for API Gateway to invoke Lambda
   LambdaCreateTeacherAvailabilityPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
@@ -230,26 +447,13 @@ Resources: # Resources to be created
           - ""
           - - "arn:aws:execute-api:"
             - Ref: "AWS::Region"
-            - ":"
+            - ":":
             - Ref: "AWS::AccountId"
-            - ":"
+            - ":":
             - Ref: SkillSessionAPIs
-            - /*/POST/create-availability
+            - "/*/POST/create-availability"  # Consistent format with slash
 
-  LambdaGetPendingBookingSlots:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaGetPendingBookingSlots
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-dynamodb
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: getBookingSlotInPending.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
+  # Permission for API Gateway to invoke Lambda
   LambdaGetPendingBookingSlotsPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
@@ -264,26 +468,13 @@ Resources: # Resources to be created
           - ""
           - - "arn:aws:execute-api:"
             - Ref: "AWS::Region"
-            - ":"
+            - ":":
             - Ref: "AWS::AccountId"
-            - ":"
+            - ":":
             - Ref: SkillSessionAPIs
-            - /*/GET/get-pending-booking-slots
+            - "/*/GET/get-pending-booking-slots"  # Fixed format
 
-  LambdaGetProfileImageURL:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaGetProfileImageURL
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-s3
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: get_profile_image_url_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
+  # Permission for API Gateway to invoke Lambda
   LambdaGetProfileImageURLPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
@@ -298,26 +489,13 @@ Resources: # Resources to be created
           - ""
           - - "arn:aws:execute-api:"
             - Ref: "AWS::Region"
-            - ":"
+            - ":":
             - Ref: "AWS::AccountId"
-            - ":"
+            - ":":
             - Ref: SkillSessionAPIs
-            - /*/GET/get-profile-img-url 
+            - "/*/GET/get-profile-img-url"
 
-  LambdaUploadProfileImage:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaUploadProfileImage
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-s3
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: upload_profile_image_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
+  # Permission for API Gateway to invoke Lambda
   LambdaUploadProfileImagePermission:
     Type: "AWS::Lambda::Permission"
     Properties:
@@ -332,26 +510,13 @@ Resources: # Resources to be created
           - ""
           - - "arn:aws:execute-api:"
             - Ref: "AWS::Region"
-            - ":"
+            - ":":
             - Ref: "AWS::AccountId"
-            - ":"
+            - ":":
             - Ref: SkillSessionAPIs
-            - /*/PUT/save-profile-img
+            - "/*/PUT/save-profile-img"  # PUT method for image upload
 
-  LambdaManageUserProfiles:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaManageUserProfiles
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-dynamodb
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: manage_user_profiles_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
+  # Permission for API Gateway to invoke Lambda
   LambdaManageUserProfilesPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
@@ -366,1207 +531,40 @@ Resources: # Resources to be created
           - ""
           - - "arn:aws:execute-api:"
             - Ref: "AWS::Region"
-            - ":"
+            - ":":
             - Ref: "AWS::AccountId"
-            - ":"
+            - ":":
             - Ref: SkillSessionAPIs
-            - /*/POST/save-user-details
+            - "/*/POST/save-user-details"
 
-  LambdaUpdateRequest:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref PLambdaUpdateRequest
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-dynamodb
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: updateRequest.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
-  LambdaUpdateRequestPermission:
-    Type: "AWS::Lambda::Permission"
-    Properties:
-      Action: "lambda:invokeFunction"
-      FunctionName:
-        "Fn::GetAtt":
-          - LambdaUpdateRequest
-          - Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn:
-        "Fn::Join":
-          - ""
-          - - "arn:aws:execute-api:"
-            - Ref: "AWS::Region"
-            - ":"
-            - Ref: "AWS::AccountId"
-            - ":"
-            - Ref: SkillSessionAPIs
-            - /*/POST/updaterequest
-
-  LambdaGetTeacherBookings:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaGetTeacherBookings
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-dynamodb
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: get_teacher_bookings_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
-  LambdaGetTeacherBookingsPermission:
-    Type: "AWS::Lambda::Permission"
-    Properties:
-      Action: "lambda:invokeFunction"
-      FunctionName:
-        "Fn::GetAtt":
-          - LambdaGetTeacherBookings
-          - Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn:
-        "Fn::Join":
-          - ""
-          - - "arn:aws:execute-api:"
-            - Ref: "AWS::Region"
-            - ":"
-            - Ref: "AWS::AccountId"
-            - ":"
-            - Ref: SkillSessionAPIs
-            - /*/POST/get-tutor-bookings
-
-  LambdaSubscribeEmailNotification:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaSubscribeEmailNotification
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/SNStest-role-072qricj
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: subscribe_email_notifications_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
-  LambdaSubscribeEmailNotificationPermission:
-    Type: "AWS::Lambda::Permission"
-    Properties:
-      Action: "lambda:invokeFunction"
-      FunctionName:
-        "Fn::GetAtt":
-          - LambdaSubscribeEmailNotification
-          - Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn:
-        "Fn::Join":
-          - ""
-          - - "arn:aws:execute-api:"
-            - Ref: "AWS::Region"
-            - ":"
-            - Ref: "AWS::AccountId"
-            - ":"
-            - Ref: SkillSessionAPIs
-            - /*/GET/subscribe
-
-  LambdaGetUserProfilesAndTeacherSearch:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaGetUserProfilesAndTeacherSearch
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-dynamodb
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: get_user_profiles_and_teacher_search_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
-  LambdaGetUserProfilesAndTeacherSearchPermission:
-    Type: "AWS::Lambda::Permission"
-    Properties:
-      Action: "lambda:invokeFunction"
-      FunctionName:
-        "Fn::GetAtt":
-          - LambdaGetUserProfilesAndTeacherSearch
-          - Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn:
-        "Fn::Join":
-          - ""
-          - - "arn:aws:execute-api:"
-            - Ref: "AWS::Region"
-            - ":"
-            - Ref: "AWS::AccountId"
-            - ":"
-            - Ref: SkillSessionAPIs
-            - /*/POST/get-user-details
-
-  LambdaProcessBookingResponse:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Ref LambdaProcessBookingResponse
-      Handler: index.handler
-      Role: arn:aws:iam::835032380954:role/role-dynamodb
-      Code:
-        S3Bucket: !Ref LambdaCodeBucket
-        S3Key: process_booking_response_handler.zip
-      Runtime: nodejs20.x
-      Timeout: 5
-      TracingConfig:
-        Mode: Active
-
-  LambdaProcessBookingResponsePermission:
-    Type: "AWS::Lambda::Permission"
-    Properties:
-      Action: "lambda:invokeFunction"
-      FunctionName:
-        "Fn::GetAtt":
-          - LambdaProcessBookingResponse
-          - Arn
-      Principal: apigateway.amazonaws.com
-      SourceArn:
-        "Fn::Join":
-          - ""
-          - - "arn:aws:execute-api:"
-            - Ref: "AWS::Region"
-            - ":"
-            - Ref: "AWS::AccountId"
-            - ":"
-            - Ref: SkillSessionAPIs
-            - /*/POST/saveslot-booking
-
-  DBAvailability:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: "id"
-          AttributeType: "S"
-      KeySchema:
-        - AttributeName: "id"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 10
-        WriteCapacityUnits: 10
-      TableName: !Ref AvailabilityTableName
-  DBBooking:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: "bookingId"
-          AttributeType: "S"
-      KeySchema:
-        - AttributeName: "bookingId"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 10
-        WriteCapacityUnits: 10
-      TableName: !Ref BookingTableName
-  DBSlots:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: "id"
-          AttributeType: "S"
-      KeySchema:
-        - AttributeName: "id"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 10
-        WriteCapacityUnits: 10
-      TableName: !Ref SlotsTableName
-  DBStudent:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: "id"
-          AttributeType: "S"
-      KeySchema:
-        - AttributeName: "id"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 10
-        WriteCapacityUnits: 10
-      TableName: !Ref StudentTableName
-  DBTeacher:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      AttributeDefinitions:
-        - AttributeName: "id"
-          AttributeType: "S"
-      KeySchema:
-        - AttributeName: "id"
-          KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 10
-        WriteCapacityUnits: 10
-      TableName: !Ref TeacherTableName
-
-  CronJobRule:
+  # ===== EVENT SCHEDULER =====
+  
+  # EventBridge rule for scheduled tasks
+  ScheduledJobRule:
     Type: AWS::Events::Rule
     Properties:
-      Description: "CronJob"
-      ScheduleExpression: "rate(2 hour)"
-      Name: !Ref SSCronJobRule
+      Description: "Regular job to clean up expired slots"
+      ScheduleExpression: "rate(2 hours)"
+      Name: !Ref ScheduledJobRuleName
       State: "ENABLED"
       Targets:
-        - Arn:
-            "Fn::GetAtt":
-              - LambdaCronJob
-              - Arn
-          Id: CronJobId
+        - Arn: !GetAtt FunctionExpireSlots.Arn
+          Id: ExpireSlotsCronJob
 
-  SkillSessionAPIs:
-    Type: AWS::ApiGateway::RestApi
-
-    Properties:
-      Name: SkillSession 
-      Description: Skill Session APIs
-
-  SkillSessionAuthorizer:
-    Type: AWS::ApiGateway::Authorizer
-    Properties:
-      IdentitySource: method.request.header.authorization
-      Name: CognitoAuthorizer
-      ProviderARNs:
-        - {
-            "Fn::Join":
-              [
-                "",
-                [
-                  "arn:aws:cognito-idp:",
-                  { Ref: "AWS::Region" },
-                  ":",
-                  { Ref: "AWS::AccountId" },
-                  ":userpool/",
-                  Ref: UserPool,
-                ],
-              ],
-          }
-
-      RestApiId: !Ref SkillSessionAPIs
-      Type: COGNITO_USER_POOLS
-
-  ResourceGetTeacherSlot:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: get-availability
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-
-  GetTeacherSlotsOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceGetSlotDetails
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  GetTeacherSlotsPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceGetSlotDetails
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaGetSlotDetails
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'POST'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceGetProfileImageURL:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: get-profile-image-url
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-
-  GetProfileImageURLOptions:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceGetProfileImageURL
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  GetProfileImageGet:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: GET
-      ResourceId:
-        Ref: ResourceGetProfileImage
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: GET
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaGetProfileImg
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'GET'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceTeacherBooking:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: get-teacher-bookings
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  TutorBookingOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceTeacherBooking
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  TeacherBookingGet:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceTutorBooking
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaGetTeacherBookings
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'GET'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceUserDetails:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: get-user-details
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  UserDetailsOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceUserDetails
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  UserDetailsPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceUserDetails
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaGetUserProfilesAndTeacherSearch
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'GET'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceBookingSlotInPending:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: getbookingslotinpending
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  BookingSlotInPendingOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceBookingSlotInPending
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  BookingSlotInPendingPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceBookingSlotInPending
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaGetBookingSlotInPending
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'GET'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceSaveAvailability:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: save-availability
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  SaveAvailabilityOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceSaveAvailability
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  SaveAvailabilityPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceSaveAvailability
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaSaveAvailability
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'GET'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceSaveProfileImage:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: save-profile-img
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  SaveProfileImageOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceSaveProfileImage
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  SaveProfileImagePut:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: PUT
-      ResourceId:
-        Ref: ResourceSaveProfileImage
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: PUT
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaUploadProfileImage
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'PUT'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourecSaveUserDetails:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: save-user-details
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  SaveUserDetailsOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourecSaveUserDetails
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  SaveUserDetailsPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourecSaveUserDetails
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaManageUserProfiles
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'POST'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceSaveSlotBooking:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: saveslot-booking
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  SaveSlotBookingOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceSaveSlotBooking
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  SaveSlotBookingPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceSaveSlotBooking
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaProcessBookingResponse
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'POST'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceSubscribe:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: subscribe
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  SubscribeOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceSubscribe
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  SubscribeGET:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: NONE
-      HttpMethod: GET
-      ResourceId:
-        Ref: ResourceSubscribe
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: GET
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaSubscribeEmailNotification
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'GET'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  ResourceUpdateRequest:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref SkillSessionAPIs
-      PathPart: updaterequest
-      ParentId:
-        Fn::GetAtt:
-          - SkillSessionAPIs
-          - RootResourceId
-  UpdateRequestOption:
-    Type: AWS::ApiGateway::Method
-    Properties:
-      AuthorizationType: NONE
-      RestApiId:
-        Ref: SkillSessionAPIs
-      ResourceId:
-        Ref: ResourceUpdateRequest
-      HttpMethod: OPTIONS
-      Integration:
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'OPTIONS'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-            ResponseTemplates:
-              application/json: ""
-        RequestTemplates:
-          application/json: '{"statusCode": 200}'
-        Type: MOCK
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-  UpdateRequestPost:
-    Type: "AWS::ApiGateway::Method"
-    Properties:
-      ApiKeyRequired: false
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref SkillSessionAuthorizer
-      HttpMethod: POST
-      ResourceId:
-        Ref: ResourceUpdateRequest
-      RestApiId:
-        Ref: SkillSessionAPIs
-
-      Integration:
-        IntegrationHttpMethod: POST
-        Type: AWS_PROXY
-        Uri:
-          "Fn::Join":
-            - ""
-            - - "arn:aws:apigateway:"
-              - Ref: "AWS::Region"
-              - ":lambda:path/2015-03-31/functions/"
-              - "Fn::GetAtt":
-                  - LambdaUpdateRequest
-                  - Arn
-              - /invocations
-        IntegrationResponses:
-          - StatusCode: 200
-            ResponseParameters:
-              "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-              "method.response.header.Access-Control-Allow-Methods": "'POST'"
-              "method.response.header.Access-Control-Allow-Origin": "'*'"
-
-            ResponseTemplates:
-              application/json: ""
-      MethodResponses:
-        - StatusCode: 200
-          ResponseModels:
-            application/json: "Empty"
-          ResponseParameters:
-            "method.response.header.Access-Control-Allow-Headers": false
-            "method.response.header.Access-Control-Allow-Methods": false
-            "method.response.header.Access-Control-Allow-Origin": false
-
-  LambdaCronJobPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName:
-        "Fn::GetAtt":
-          - LambdaCronJob
-          - Arn
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn:
-        Fn::GetAtt:
-          - CronJobRule
-          - "Arn"
-
+# ===== OUTPUTS =====
 Outputs:
-  CognitoUserPoolID:
+  UserPoolId:
     Value: !Ref UserPool
-    Description: The UserPool ID
-  CognitoAppClientID:
+    Description: "The UserPool ID for authentication"
+  
+  UserPoolClientId:
     Value: !Ref UserPoolClient
-    Description: The app client
+    Description: "The app client ID for frontend integration"
+  
+  ApiEndpoint:
+    Value: !Sub https://${ApiGateway}.execute-api.${AwsRegion}.amazonaws.com/prod/
+    Description: "API Gateway endpoint URL"
+  
   HostedUIURL:
-    Value: !Sub https://${CognitoDomain}.auth.us-west-2.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=http://localhost:3000
-    Description: The hosted UI URL
+    Value: !Sub https://${AuthDomainPrefix}.auth.${AwsRegion}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=http://localhost:3000
+    Description: "The hosted UI URL for authentication"
