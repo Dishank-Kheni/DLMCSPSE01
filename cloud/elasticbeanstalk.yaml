@@ -1,57 +1,109 @@
 AWSTemplateFormatVersion: "2010-09-09"
+
+# ===== TEMPLATE PARAMETERS =====
 Parameters:
+  # Application configuration
   AppName:
     Type: String
+    Default: skill-session
+    Description: Name of the ElasticBeanstalk application
+
+  # Environment naming 
+  EnvironmentType:
+    Type: String
     Default: production
+    Description: Environment type (production, staging, development)
+    AllowedValues:
+      - production
+      - staging
+      - development
+  
+  # Infrastructure sizing
   EC2InstanceType:
     Type: String
-    Default: t2.medium
+    Default: t3.small
+    Description: EC2 instance type for the environment
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+  
+  # Autoscaling configuration
+  MinInstanceCount:
+    Type: Number
+    Default: 1
+    Description: Minimum number of EC2 instances
+    MinValue: 1
+  
+  MaxInstanceCount:
+    Type: Number
+    Default: 4
+    Description: Maximum number of EC2 instances
+    MinValue: 1
+  
+  # Application deployment
+  S3BucketName:
+    Type: String
+    Default: skillsession
+    Description: S3 bucket containing application code
+  
+  S3KeyName:
+    Type: String
+    Default: skillsession.zip
+    Description: S3 key for application deployment package
+
+# ===== RESOURCES SECTION =====
 Resources:
-  Application:
+  # ElasticBeanstalk Application
+  EbApplication:
     Type: "AWS::ElasticBeanstalk::Application"
     Properties:
       ApplicationName: !Ref AppName
-      Description: Skill Session ElasticBeanstalk Application
+      Description: "Skill Session Tutoring Platform Application"
 
-  ApplicationVersion:
+  # Application Version
+  EbApplicationVersion:
     Type: "AWS::ElasticBeanstalk::ApplicationVersion"
     Properties:
-      ApplicationName: !Ref Application
-      Description: String
+      ApplicationName: !Ref EbApplication
+      Description: "Current deployment version"
       SourceBundle:
-        S3Bucket: skillsession
-        S3Key: skillsession.zip
+        S3Bucket: !Ref S3BucketName
+        S3Key: !Ref S3KeyName
 
-  ElasticBeanstalkEnvironment:
+  # Environment Configuration
+  EbEnvironment:
     Type: "AWS::ElasticBeanstalk::Environment"
     Properties:
-      EnvironmentName: !Join ["-", [!Ref AppName, "skillsession"]]
-      ApplicationName: !Ref Application
+      EnvironmentName: !Join ["-", [!Ref EnvironmentType, !Ref AppName]]
+      ApplicationName: !Ref EbApplication
       SolutionStackName: "64bit Amazon Linux 2 v6.0.4 running Docker"
       Tier:
         Name: WebServer
         Type: Standard
         Version: "1.0"
-      VersionLabel: !Ref ApplicationVersion
+      VersionLabel: !Ref EbApplicationVersion
       OptionSettings:
-        - Namespace: aws:autoscaling:asg
-          OptionName: MinSize
-          Value: "1"
-        - Namespace: aws:autoscaling:asg
-          OptionName: MaxSize
-          Value: "2"
+        # Instance configuration
         - Namespace: aws:autoscaling:launchconfiguration
           OptionName: InstanceType
-          Value: t2.medium
+          Value: !Ref EC2InstanceType
+        
+        # Environment type
         - Namespace: aws:elasticbeanstalk:environment
           OptionName: EnvironmentType
           Value: LoadBalanced
+        
+        # Auto-scaling configuration
         - Namespace: aws:autoscaling:asg
           OptionName: MinSize
-          Value: 1
+          Value: !Ref MinInstanceCount
         - Namespace: aws:autoscaling:asg
           OptionName: MaxSize
-          Value: 4
+          Value: !Ref MaxInstanceCount
+        
+        # Scaling triggers
         - Namespace: aws:autoscaling:trigger
           OptionName: MeasureName
           Value: CPUUtilization
@@ -64,8 +116,24 @@ Resources:
         - Namespace: aws:autoscaling:trigger
           OptionName: LowerThreshold
           Value: "30"
+        - Namespace: aws:autoscaling:trigger
+          OptionName: BreachDuration
+          Value: "5"
+        
+        # Load balancer settings
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: HealthCheckPath
+          Value: "/health"
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: MatcherHTTPCode
+          Value: "200"
 
+# ===== OUTPUTS SECTION =====
 Outputs:
-  PublicAlbDnsName:
-    Description: ElasticBeanstalk APP URL
-    Value: !GetAtt "ElasticBeanstalkEnvironment.EndpointURL"
+  ApplicationURL:
+    Description: "URL of the ElasticBeanstalk application"
+    Value: !GetAtt "EbEnvironment.EndpointURL"
+  
+  EnvironmentName:
+    Description: "Name of the created environment"
+    Value: !Ref EbEnvironment
