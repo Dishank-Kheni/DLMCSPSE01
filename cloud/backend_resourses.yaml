@@ -13,7 +13,7 @@ Parameters:
     Description: AWS region for all resources
     Default: eu-north-1 # Region of the resources
 
-  LambdaCodeBucketName:
+  LambdaCodeBucket:
     Type: String
     Description: S3 bucket holding Lambda deployment packages
     Default: skill-session-lambda # Name of the S3 bucket where the lambda code is stored
@@ -40,7 +40,7 @@ Parameters:
   LambdaExpireSlotsCronJob: # Name of the Lambda function for cron job
     Type: String
     Default: expire_slots_cronjob
-  LambdaGetTeacherSlotDetails: # Name of the Lambda function for get slot details
+  LambdaGetTeacherSlots: # Name of the Lambda function for get slot details
     Type: String
     Default: get_teacher_slots_handler
   LambdaCreateTeacherAvailability: # Name of the Lambda function for save availability
@@ -73,19 +73,19 @@ Parameters:
   LambdaCreateBookingRequest: # Name of the Lambda function for save booking details
     Type: String
     Default: create_booking_request_handler
-  CronJobRule: # Name of the EventBridge Rule for cron job
+  SSCronJobRule: # Name of the EventBridge Rule for cron job
     Type: String
     Default: cron-job-rule
 
 Resources: # Resources to be created
-  UserPool: # Cognito User Pool
+  CognitoUserPool: # Cognito User Pool
     Type: "AWS::Cognito::UserPool" # Type of resource
 
     Properties: # Properties of the resource
       UsernameConfiguration: # Username configuration
         CaseSensitive: false # Username is not case sensitive
       Schema: # Schema of the user pool
-        - Name: given_name
+        - Name: first_name
           AttributeDataType: String
           DeveloperOnlyAttribute: false
           Mutable: true # Attribute can be changed
@@ -93,7 +93,7 @@ Resources: # Resources to be created
           StringAttributeConstraints:
             MinLength: "0"
             MaxLength: "2048"
-        - Name: family_name # Attribute name
+        - Name: last_name # Attribute name
           AttributeDataType: String
           DeveloperOnlyAttribute: false
           Mutable: true
@@ -131,10 +131,10 @@ Resources: # Resources to be created
       VerificationMessageTemplate:
         DefaultEmailOption: CONFIRM_WITH_CODE # Default email option
 
-  UserPoolClient: # Cognito App Client
-    Type: AWS::Cognito::UserPoolClient # Type of resource
+  CognitoUserPoolClient: # Cognito App Client
+    Type: AWS::Cognito::CognitoUserPoolClient # Type of resource
     Properties:
-      UserPoolId: !Ref UserPool # Reference to the user pool
+      UserPoolId: !Ref CognitoUserPool # Reference to the user pool
       AllowedOAuthFlowsUserPoolClient: true # OAuth flow is enabled
       GenerateSecret: false
       CallbackURLs:
@@ -147,47 +147,48 @@ Resources: # Resources to be created
       SupportedIdentityProviders: # Identity providers supported
         - COGNITO # Cognito user pool
 
-  UserPoolDomain: # Cognito User Pool Domain
-    Type: AWS::Cognito::UserPoolDomain # Type of resource
+  CognitoUserPoolDomain: # Cognito User Pool Domain
+    Type: AWS::Cognito::CognitoUserPoolDomain # Type of resource
     Properties: # Properties of the resource
       Domain: !Ref CognitoDomain # Name of the domain
-      UserPoolId: !Ref UserPool # Reference to the user pool
+      UserPoolId: !Ref CognitoUserPool # Reference to the user pool
 
   LambdaCronJob: # Lambda function for cron job
     Type: AWS::Lambda::Function # Type of resource
     Properties: # Properties of the resource
       FunctionName: !Ref LambdaCronJob # Name of the function
       Handler: index.handler # Handler of the function
-      Role: arn:aws:iam::835032380954:role/cronjob-role # Role of the function
+      Role: arn:aws:iam::8350
+      32380954:role/cronjob-role # Role of the function
       Code: # Code of the function
-        S3Bucket: !Ref BucketName # Reference to the S3 bucket
+        S3Bucket: !Ref LambdaCodeBucket # Reference to the S3 bucket
         S3Key: cronjob.zip # Name of the zip file
-      Runtime: nodejs16.x # Runtime of the function
+      Runtime: nodejs20.x # Runtime of the function
       Timeout: 5 # Timeout of the function
       TracingConfig: # Tracing configuration of the function
         Mode: Active # Tracing is enabled
 
-  LambdaGetSlotDetails:
+  LambdaGetTeacherSlots:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Ref PLambdaGetSlotDetails
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: getslotdetails.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: get_teacher_slots_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaGetSlotDetailsPermission: # Permission for the lambda function
+  LambdaGetTeacherSlotsPermission: # Permission for the lambda function
     Type: "AWS::Lambda::Permission" # Type of resource
     Properties: # Properties of the resource
       Action: "lambda:invokeFunction" # Action to be performed
       FunctionName: # Reference to the lambda function
         "Fn::GetAtt": # Reference to the lambda function
-          - LambdaGetSlotDetails # Name of the lambda function
+          - LambdaGetTeacherSlots # Name of the lambda function
           - Arn # ARN of the lambda function
       Principal: apigateway.amazonaws.com # Principal of the permission
       SourceArn: # ARN of the source
@@ -198,30 +199,30 @@ Resources: # Resources to be created
             - ":" # ARN of the API gateway
             - Ref: "AWS::AccountId" # Account ID of the API gateway
             - ":" # ARN of the API gateway
-            - Ref: UnitedTutoringAPIs # Reference to the API gateway
-            - /*/POST/get-availability # ARN of the API gateway
+            - Ref: SkillSessionAPIs # Reference to the API gateway
+            - /*/POST/get-teacher-slots # ARN of the API gateway
 
-  LambdaSaveAvailability:
+  LambdaCreateTeacherAvailability:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaSaveAvailability
+      FunctionName: !Ref LambdaCreateTeacherAvailability
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: save-availability.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: create_teacher_availability_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaSaveAvailabilityPermission:
+  LambdaCreateTeacherAvailabilityPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaSaveAvailability
+          - LambdaCreateTeacherAvailability
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -232,30 +233,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
-            - /*/POST/save-availability
+            - Ref: SkillSessionAPIs
+            - /*/POST/create-availability
 
-  LambdaGetBookingSlotInPending:
+  LambdaGetPendingBookingSlots:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaGetBookingSlotInPending
+      FunctionName: !Ref LambdaGetPendingBookingSlots
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
+        S3Bucket: !Ref LambdaCodeBucket
         S3Key: getBookingSlotInPending.zip
-      Runtime: nodejs16.x
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaGetBookingSlotInPendingPermission:
+  LambdaGetPendingBookingSlotsPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaGetBookingSlotInPending
+          - LambdaGetPendingBookingSlots
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -266,30 +267,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
-            - /*/GET/getbookingslotinpending
+            - Ref: SkillSessionAPIs
+            - /*/GET/get-pending-booking-slots
 
-  LambdaGetProfileImg:
+  LambdaGetProfileImageURL:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaGetProfileImg
+      FunctionName: !Ref LambdaGetProfileImageURL
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-s3
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: get-profile-img.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: get_profile_image_url_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaGetProfileImgPermission:
+  LambdaGetProfileImageURLPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaGetProfileImg
+          - LambdaGetProfileImageURL
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -300,30 +301,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
-            - /*/GET/get-profile-img
+            - Ref: SkillSessionAPIs
+            - /*/GET/get-profile-img-url 
 
-  LambdaSaveProfileImg:
+  LambdaUploadProfileImage:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaSaveProfileImg
+      FunctionName: !Ref LambdaUploadProfileImage
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-s3
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: save-profile-img.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: upload_profile_image_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaSaveProfileImgPermission:
+  LambdaUploadProfileImagePermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaSaveProfileImg
+          - LambdaUploadProfileImage
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -334,30 +335,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/PUT/save-profile-img
 
-  LambdasSaveUserDetails:
+  LambdaManageUserProfiles:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdasSaveUserDetails
+      FunctionName: !Ref LambdaManageUserProfiles
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: save-user-details.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: manage_user_profiles_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdasSaveUserDetailsPermission:
+  LambdaManageUserProfilesPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdasSaveUserDetails
+          - LambdaManageUserProfiles
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -368,7 +369,7 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/POST/save-user-details
 
   LambdaUpdateRequest:
@@ -378,9 +379,9 @@ Resources: # Resources to be created
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
+        S3Bucket: !Ref LambdaCodeBucket
         S3Key: updateRequest.zip
-      Runtime: nodejs16.x
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
@@ -402,30 +403,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/POST/updaterequest
 
-  LambdaGetTutorBookings:
+  LambdaGetTeacherBookings:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaGetTutorBookings
+      FunctionName: !Ref LambdaGetTeacherBookings
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: get-tutor-bookings.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: get_teacher_bookings_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaGetTutorBookingsPermission:
+  LambdaGetTeacherBookingsPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaGetTutorBookings
+          - LambdaGetTeacherBookings
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -436,30 +437,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/POST/get-tutor-bookings
 
-  LambdaSubscribeForEmailNotification:
+  LambdaSubscribeEmailNotification:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaSubscribeForEmailNotification
+      FunctionName: !Ref LambdaSubscribeEmailNotification
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/SNStest-role-072qricj
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: subscribeForEmailNotification.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: subscribe_email_notifications_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaSubscribeForEmailNotificationPermission:
+  LambdaSubscribeEmailNotificationPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaSubscribeForEmailNotification
+          - LambdaSubscribeEmailNotification
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -470,30 +471,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/GET/subscribe
 
-  LambdaGetUserDetails:
+  LambdaGetUserProfilesAndTeacherSearch:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaGetUserDetails
+      FunctionName: !Ref LambdaGetUserProfilesAndTeacherSearch
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: get-user-details.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: get_user_profiles_and_teacher_search_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaGetUserDetailsPermission:
+  LambdaGetUserProfilesAndTeacherSearchPermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaGetUserDetails
+          - LambdaGetUserProfilesAndTeacherSearch
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -504,30 +505,30 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/POST/get-user-details
 
-  LambdaSaveBookingDetails:
+  LambdaProcessBookingResponse:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: !Ref PLambdaSaveBookingDetails
+      FunctionName: !Ref LambdaProcessBookingResponse
       Handler: index.handler
       Role: arn:aws:iam::835032380954:role/role-dynamodb
       Code:
-        S3Bucket: !Ref BucketName
-        S3Key: savebookingdetails.zip
-      Runtime: nodejs16.x
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: process_booking_response_handler.zip
+      Runtime: nodejs20.x
       Timeout: 5
       TracingConfig:
         Mode: Active
 
-  LambdaSaveBookingDetailsPermission:
+  LambdaProcessBookingResponsePermission:
     Type: "AWS::Lambda::Permission"
     Properties:
       Action: "lambda:invokeFunction"
       FunctionName:
         "Fn::GetAtt":
-          - LambdaSaveBookingDetails
+          - LambdaProcessBookingResponse
           - Arn
       Principal: apigateway.amazonaws.com
       SourceArn:
@@ -538,10 +539,10 @@ Resources: # Resources to be created
             - ":"
             - Ref: "AWS::AccountId"
             - ":"
-            - Ref: UnitedTutoringAPIs
+            - Ref: SkillSessionAPIs
             - /*/POST/saveslot-booking
 
-  DynamoDBAvailability:
+  DBAvailability:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
@@ -553,8 +554,8 @@ Resources: # Resources to be created
       ProvisionedThroughput:
         ReadCapacityUnits: 10
         WriteCapacityUnits: 10
-      TableName: !Ref PDynamoDBAvailability
-  DynamoDBBookingDetails:
+      TableName: !Ref AvailabilityTableName
+  DBBooking:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
@@ -566,8 +567,8 @@ Resources: # Resources to be created
       ProvisionedThroughput:
         ReadCapacityUnits: 10
         WriteCapacityUnits: 10
-      TableName: !Ref PDynamoDBBookingDetails
-  DynamoDBSlots:
+      TableName: !Ref BookingTableName
+  DBSlots:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
@@ -579,8 +580,8 @@ Resources: # Resources to be created
       ProvisionedThroughput:
         ReadCapacityUnits: 10
         WriteCapacityUnits: 10
-      TableName: !Ref PDynamoDBSlots
-  DynamoDBStudentDetails:
+      TableName: !Ref SlotsTableName
+  DBStudent:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
@@ -592,8 +593,8 @@ Resources: # Resources to be created
       ProvisionedThroughput:
         ReadCapacityUnits: 10
         WriteCapacityUnits: 10
-      TableName: !Ref PDynamoDBStudentDetails
-  DynamoDBTutorDetails:
+      TableName: !Ref StudentTableName
+  DBTeacher:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
@@ -605,14 +606,14 @@ Resources: # Resources to be created
       ProvisionedThroughput:
         ReadCapacityUnits: 10
         WriteCapacityUnits: 10
-      TableName: !Ref PDynamoDBTutorDetails
+      TableName: !Ref TeacherTableName
 
   CronJobRule:
     Type: AWS::Events::Rule
     Properties:
       Description: "CronJob"
-      ScheduleExpression: "rate(1 hour)"
-      Name: !Ref PCronJobRule
+      ScheduleExpression: "rate(2 hour)"
+      Name: !Ref SSCronJobRule
       State: "ENABLED"
       Targets:
         - Arn:
@@ -621,14 +622,14 @@ Resources: # Resources to be created
               - Arn
           Id: CronJobId
 
-  UnitedTutoringAPIs:
+  SkillSessionAPIs:
     Type: AWS::ApiGateway::RestApi
 
     Properties:
-      Name: UnitedTutoring
-      Description: united tutoring
+      Name: SkillSession 
+      Description: Skill Session APIs
 
-  Authorizer:
+  SkillSessionAuthorizer:
     Type: AWS::ApiGateway::Authorizer
     Properties:
       IdentitySource: method.request.header.authorization
@@ -649,25 +650,25 @@ Resources: # Resources to be created
               ],
           }
 
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       Type: COGNITO_USER_POOLS
 
-  ResourceGetSlotDetails:
+  ResourceGetTeacherSlot:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: get-availability
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
 
-  GetSlotDetailsOption:
+  GetTeacherSlotsOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceGetSlotDetails
       HttpMethod: OPTIONS
@@ -692,17 +693,17 @@ Resources: # Resources to be created
             "method.response.header.Access-Control-Allow-Methods": false
             "method.response.header.Access-Control-Allow-Origin": false
 
-  GetSlotDetailsPost:
+  GetTeacherSlotsPost:
     Type: "AWS::ApiGateway::Method"
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceGetSlotDetails
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -735,24 +736,24 @@ Resources: # Resources to be created
             "method.response.header.Access-Control-Allow-Methods": false
             "method.response.header.Access-Control-Allow-Origin": false
 
-  ResourceGetProfileImage:
+  ResourceGetProfileImageURL:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
-      PathPart: get-profile-img
+      RestApiId: !Ref SkillSessionAPIs
+      PathPart: get-profile-image-url
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
 
-  GetProfileImageOptions:
+  GetProfileImageURLOptions:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
-        Ref: ResourceGetProfileImage
+        Ref: ResourceGetProfileImageURL
       HttpMethod: OPTIONS
       Integration:
         IntegrationResponses:
@@ -779,12 +780,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: GET
       ResourceId:
         Ref: ResourceGetProfileImage
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: GET
@@ -817,23 +818,23 @@ Resources: # Resources to be created
             "method.response.header.Access-Control-Allow-Methods": false
             "method.response.header.Access-Control-Allow-Origin": false
 
-  ResourceTutorBooking:
+  ResourceTeacherBooking:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
-      PathPart: get-tutor-bookings
+      RestApiId: !Ref SkillSessionAPIs
+      PathPart: get-teacher-bookings
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   TutorBookingOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
-        Ref: ResourceTutorBooking
+        Ref: ResourceTeacherBooking
       HttpMethod: OPTIONS
       Integration:
         IntegrationResponses:
@@ -855,17 +856,17 @@ Resources: # Resources to be created
             "method.response.header.Access-Control-Allow-Headers": false
             "method.response.header.Access-Control-Allow-Methods": false
             "method.response.header.Access-Control-Allow-Origin": false
-  TutorBookingGet:
+  TeacherBookingGet:
     Type: "AWS::ApiGateway::Method"
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceTutorBooking
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -877,7 +878,7 @@ Resources: # Resources to be created
               - Ref: "AWS::Region"
               - ":lambda:path/2015-03-31/functions/"
               - "Fn::GetAtt":
-                  - LambdaGetTutorBookings
+                  - LambdaGetTeacherBookings
                   - Arn
               - /invocations
         IntegrationResponses:
@@ -901,18 +902,18 @@ Resources: # Resources to be created
   ResourceUserDetails:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: get-user-details
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   UserDetailsOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceUserDetails
       HttpMethod: OPTIONS
@@ -941,12 +942,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceUserDetails
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -958,7 +959,7 @@ Resources: # Resources to be created
               - Ref: "AWS::Region"
               - ":lambda:path/2015-03-31/functions/"
               - "Fn::GetAtt":
-                  - LambdaGetUserDetails
+                  - LambdaGetUserProfilesAndTeacherSearch
                   - Arn
               - /invocations
         IntegrationResponses:
@@ -982,18 +983,18 @@ Resources: # Resources to be created
   ResourceBookingSlotInPending:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: getbookingslotinpending
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   BookingSlotInPendingOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceBookingSlotInPending
       HttpMethod: OPTIONS
@@ -1022,12 +1023,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceBookingSlotInPending
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -1063,18 +1064,18 @@ Resources: # Resources to be created
   ResourceSaveAvailability:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: save-availability
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   SaveAvailabilityOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceSaveAvailability
       HttpMethod: OPTIONS
@@ -1103,12 +1104,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceSaveAvailability
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -1144,18 +1145,18 @@ Resources: # Resources to be created
   ResourceSaveProfileImage:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: save-profile-img
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   SaveProfileImageOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceSaveProfileImage
       HttpMethod: OPTIONS
@@ -1184,12 +1185,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: PUT
       ResourceId:
         Ref: ResourceSaveProfileImage
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: PUT
@@ -1201,7 +1202,7 @@ Resources: # Resources to be created
               - Ref: "AWS::Region"
               - ":lambda:path/2015-03-31/functions/"
               - "Fn::GetAtt":
-                  - LambdaSaveProfileImg
+                  - LambdaUploadProfileImage
                   - Arn
               - /invocations
         IntegrationResponses:
@@ -1225,18 +1226,18 @@ Resources: # Resources to be created
   ResourecSaveUserDetails:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: save-user-details
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   SaveUserDetailsOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourecSaveUserDetails
       HttpMethod: OPTIONS
@@ -1265,12 +1266,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourecSaveUserDetails
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -1282,7 +1283,7 @@ Resources: # Resources to be created
               - Ref: "AWS::Region"
               - ":lambda:path/2015-03-31/functions/"
               - "Fn::GetAtt":
-                  - LambdasSaveUserDetails
+                  - LambdaManageUserProfiles
                   - Arn
               - /invocations
         IntegrationResponses:
@@ -1306,18 +1307,18 @@ Resources: # Resources to be created
   ResourceSaveSlotBooking:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: saveslot-booking
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   SaveSlotBookingOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceSaveSlotBooking
       HttpMethod: OPTIONS
@@ -1346,12 +1347,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceSaveSlotBooking
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
@@ -1363,7 +1364,7 @@ Resources: # Resources to be created
               - Ref: "AWS::Region"
               - ":lambda:path/2015-03-31/functions/"
               - "Fn::GetAtt":
-                  - LambdaSaveBookingDetails
+                  - LambdaProcessBookingResponse
                   - Arn
               - /invocations
         IntegrationResponses:
@@ -1387,18 +1388,18 @@ Resources: # Resources to be created
   ResourceSubscribe:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: subscribe
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   SubscribeOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceSubscribe
       HttpMethod: OPTIONS
@@ -1431,7 +1432,7 @@ Resources: # Resources to be created
       ResourceId:
         Ref: ResourceSubscribe
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: GET
@@ -1443,7 +1444,7 @@ Resources: # Resources to be created
               - Ref: "AWS::Region"
               - ":lambda:path/2015-03-31/functions/"
               - "Fn::GetAtt":
-                  - LambdaSubscribeForEmailNotification
+                  - LambdaSubscribeEmailNotification
                   - Arn
               - /invocations
         IntegrationResponses:
@@ -1467,18 +1468,18 @@ Resources: # Resources to be created
   ResourceUpdateRequest:
     Type: AWS::ApiGateway::Resource
     Properties:
-      RestApiId: !Ref UnitedTutoringAPIs
+      RestApiId: !Ref SkillSessionAPIs
       PathPart: updaterequest
       ParentId:
         Fn::GetAtt:
-          - UnitedTutoringAPIs
+          - SkillSessionAPIs
           - RootResourceId
   UpdateRequestOption:
     Type: AWS::ApiGateway::Method
     Properties:
       AuthorizationType: NONE
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
       ResourceId:
         Ref: ResourceUpdateRequest
       HttpMethod: OPTIONS
@@ -1507,12 +1508,12 @@ Resources: # Resources to be created
     Properties:
       ApiKeyRequired: false
       AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref Authorizer
+      AuthorizerId: !Ref SkillSessionAuthorizer
       HttpMethod: POST
       ResourceId:
         Ref: ResourceUpdateRequest
       RestApiId:
-        Ref: UnitedTutoringAPIs
+        Ref: SkillSessionAPIs
 
       Integration:
         IntegrationHttpMethod: POST
