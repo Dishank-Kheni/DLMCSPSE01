@@ -1,205 +1,247 @@
-const AWS = require("aws-sdk");
+'use strict';
 
-// Initialize AWS SDK clients once (outside the handler for reuse across invocations)
-const documentClient = new AWS.DynamoDB.DocumentClient();
-const dynamoDB = new AWS.DynamoDB({ apiVersion: "2012-08-10" });
+const AWS = require('aws-sdk');
 
-// Constants
+// Initialize AWS SDK clients once (for improved performance across invocations)
+const dynamoDB = new AWS.DynamoDB();
+const docClient = new AWS.DynamoDB.DocumentClient();
+
+// Configuration constants
 const TABLES = {
-  STUDENT: "students",
-  TUTOR: "tutors",
-  SKILLS: "skills",
+  LEARNER: 'learners',  // Changed from 'students'
+  TEACHER: 'teachers',  // Changed from 'tutors'
+  SKILLS: 'skills'
 };
 
-// Standard headers for all responses
 const CORS_HEADERS = {
-  "Content-Type": "application/json",
-  "access-control-allow-headers":
-    "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-  "access-control-allow-methods": "OPTIONS,POST",
-  "access-control-allow-origin": "*",
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+  'Access-Control-Allow-Methods': 'OPTIONS,POST',
+  'Access-Control-Allow-Origin': '*'
 };
 
 /**
- * Creates a new item in DynamoDB
- * @param {Object} params - Parameters for putItem operation
- * @returns {Promise<boolean>} - Success status of the operation
+ * Database service with methods for DynamoDB operations
  */
-async function createItem(params) {
-  try {
-    await dynamoDB.putItem(params).promise();
-    return true;
-  } catch (error) {
-    console.error(`Error creating item: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Updates an existing item in DynamoDB
- * @param {Object} params - Parameters for update operation
- * @returns {Promise<boolean>} - Success status of the operation
- */
-async function updateItem(params) {
-  try {
-    await documentClient.update(params).promise();
-    return true;
-  } catch (error) {
-    console.error(`Error updating item: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Updates the skills table with tutor information
- * @param {string} skill - The skill to update
- * @param {string} email - The tutor's email
- * @returns {Promise<boolean>} - Success status of the operation
- */
-async function updateTutorSkills(skill, email) {
-  const skillsParams = {
-    TableName: TABLES.SKILLS,
-    Key: { skill: skill },
-    UpdateExpression: "add tutors :t",
-    ExpressionAttributeValues: {
-      ":t": documentClient.createSet([email]),
-    },
-    ReturnValues: "UPDATED_NEW",
-  };
-
-  return await updateItem(skillsParams);
-}
-
-/**
- * Creates a DynamoDB attribute value
- * @param {string} value - Value to convert
- * @returns {Object} - DynamoDB formatted attribute
- */
-function createAttribute(value) {
-  return { S: String(value || "") };
-}
-
-/**
- * Prepares student item for DynamoDB
- * @param {Object} userData - User data
- * @returns {Object} - Formatted student item
- */
-function prepareStudentItem(userData) {
-  return {
-    id: createAttribute(userData.email),
-    firstName: createAttribute(userData.firstName),
-    lastName: createAttribute(userData.lastName),
-    mobileNo: createAttribute(userData.mobileNo),
-    university: createAttribute(""),
-    program: createAttribute(""),
-    courses: createAttribute(""),
-    startyear: createAttribute(""),
-    endyear: createAttribute(""),
-  };
-}
-
-/**
- * Prepares tutor item for DynamoDB
- * @param {Object} userData - User data
- * @returns {Object} - Formatted tutor item
- */
-function prepareTutorItem(userData) {
-  return {
-    id: createAttribute(userData.email),
-    firstName: createAttribute(userData.firstName),
-    lastName: createAttribute(userData.lastName),
-    mobileNo: createAttribute(userData.mobileNo),
-    skills: createAttribute(""),
-    expyears: createAttribute(""),
-    expdesc: createAttribute(""),
-  };
-}
-
-/**
- * Handles user registration
- * @param {Object} userData - User registration data
- * @returns {Promise<void>}
- */
-async function handleRegistration(userData) {
-  if (userData.register !== true) return;
-
-  const userType = userData.userType;
-  const tasks = [];
-
-  // Prepare parameters for student and tutor tables
-  const studentParams = {
-    TableName: TABLES.STUDENT,
-    Item: prepareStudentItem(userData),
-  };
-
-  const tutorParams = {
-    TableName: TABLES.TUTOR,
-    Item: prepareTutorItem(userData),
-  };
-
-  // Start registration operations concurrently based on user type
-  if (userType.includes(",")) {
-    tasks.push(createItem(studentParams));
-    tasks.push(createItem(tutorParams));
-  } else if (userType === "tutor") {
-    tasks.push(createItem(tutorParams));
-  } else {
-    tasks.push(createItem(studentParams));
-  }
-
-  // Wait for all operations to complete
-  await Promise.all(tasks);
-}
-
-/**
- * Handles profile updates for existing users
- * @param {Object} userData - User profile data to update
- * @returns {Promise<void>}
- */
-async function handleProfileUpdate(userData) {
-  if (userData.skills) {
-    // Tutor profile update
-    const tutorUpdateParams = {
-      TableName: TABLES.TUTOR,
-      Key: { id: userData.email },
-      UpdateExpression:
-        "set skills = :skills, expyears = :expyears, expdesc = :expdesc",
-      ExpressionAttributeValues: {
-        ":skills": userData.skills,
-        ":expyears": userData.expyears,
-        ":expdesc": userData.expdesc,
-      },
-      ReturnValues: "UPDATED_NEW",
-    };
-
-    await updateItem(tutorUpdateParams);
-
-    // If skills are provided, we could also update the skills table
-    // This potential enhancement is commented out as it depends on how skills are structured
-    /*
-    if (Array.isArray(userData.skills)) {
-      const skillPromises = userData.skills.map(skill => updateTutorSkills(skill, userData.email));
-      await Promise.all(skillPromises);
+class DatabaseService {
+  /**
+   * Creates a new item in DynamoDB
+   * @param {string} tableName - Name of the table
+   * @param {Object} item - Item to create
+   * @returns {Promise<boolean>} - Success status
+   */
+  async createItem(tableName, item) {
+    try {
+      const params = {
+        TableName: tableName,
+        Item: item
+      };
+      await dynamoDB.putItem(params).promise();
+      return true;
+    } catch (error) {
+      console.error(`[DB Error] Create item failed: ${error.message}`);
+      throw new Error(`Database operation failed: ${error.message}`);
     }
-    */
-  } else {
-    // Student profile update
-    const studentUpdateParams = {
-      TableName: TABLES.STUDENT,
-      Key: { id: userData.email },
-      UpdateExpression:
-        "set university = :university, program = :program, courses = :courses, startyear = :startyear, endyear = :endyear",
-      ExpressionAttributeValues: {
-        ":university": userData.university,
-        ":program": userData.program,
-        ":courses": userData.courses,
-        ":startyear": userData.startyear,
-        ":endyear": userData.endyear,
-      },
-      ReturnValues: "UPDATED_NEW",
-    };
+  }
 
-    await updateItem(studentUpdateParams);
+  /**
+   * Updates an existing item in DynamoDB
+   * @param {Object} params - Update parameters
+   * @returns {Promise<Object>} - Updated attributes
+   */
+  async updateItem(params) {
+    try {
+      const result = await docClient.update(params).promise();
+      return result.Attributes;
+    } catch (error) {
+      console.error(`[DB Error] Update item failed: ${error.message}`);
+      throw new Error(`Database operation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Updates skills table with teacher information
+   * @param {string} skill - The skill name
+   * @param {string} teacherEmail - The teacher's email
+   * @returns {Promise<Object>} - Updated attributes
+   */
+  async updateTeacherSkill(skill, teacherEmail) {  // Changed from updateTutorSkill
+    const params = {
+      TableName: TABLES.SKILLS,
+      Key: { skill },
+      UpdateExpression: 'ADD teachers :teacher',  // Changed from tutors :tutor
+      ExpressionAttributeValues: {
+        ':teacher': docClient.createSet([teacherEmail])  // Changed from :tutor
+      },
+      ReturnValues: 'UPDATED_NEW'
+    };
+    return this.updateItem(params);
+  }
+}
+
+/**
+ * User service with methods for user management
+ */
+class UserService {
+  constructor(dbService) {
+    this.db = dbService;
+  }
+
+  /**
+   * Creates attribute values for DynamoDB
+   * @param {string} value - Value to convert
+   * @returns {Object} - DynamoDB attribute
+   */
+  _createAttribute(value = '') {
+    return { S: String(value) };
+  }
+
+  /**
+   * Validates user data for registration
+   * @param {Object} userData - User data to validate
+   * @throws {Error} If validation fails
+   */
+  _validateUserData(userData) {
+    const requiredFields = ['email', 'firstName', 'lastName', 'userType'];
+    for (const field of requiredFields) {
+      if (!userData[field]) {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+    
+    const validUserTypes = ['learner', 'teacher', 'learner,teacher', 'teacher,learner'];  // Changed from student/tutor
+    if (!validUserTypes.includes(userData.userType)) {
+      throw new Error(`Invalid userType: ${userData.userType}`);
+    }
+  }
+  
+  /**
+   * Prepares a user object for learner table
+   * @param {Object} userData - User data
+   * @returns {Object} - Formatted learner item
+   */
+  _prepareLearnerItem(userData) {  // Changed from _prepareStudentItem
+    return {
+      id: this._createAttribute(userData.email),
+      firstName: this._createAttribute(userData.firstName),
+      lastName: this._createAttribute(userData.lastName),
+      mobileNo: this._createAttribute(userData.mobileNo),
+      university: this._createAttribute(userData.university || ''),
+      program: this._createAttribute(userData.program || ''),
+      courses: this._createAttribute(userData.courses || ''),
+      startyear: this._createAttribute(userData.startyear || ''),
+      endyear: this._createAttribute(userData.endyear || '')
+    };
+  }
+
+  /**
+   * Prepares a user object for teacher table
+   * @param {Object} userData - User data
+   * @returns {Object} - Formatted teacher item
+   */
+  _prepareTeacherItem(userData) {  // Changed from _prepareTutorItem
+    return {
+      id: this._createAttribute(userData.email),
+      firstName: this._createAttribute(userData.firstName),
+      lastName: this._createAttribute(userData.lastName),
+      mobileNo: this._createAttribute(userData.mobileNo),
+      skills: this._createAttribute(userData.skills || ''),
+      expyears: this._createAttribute(userData.expyears || ''),
+      expdesc: this._createAttribute(userData.expdesc || '')
+    };
+  }
+
+  /**
+   * Handles user registration
+   * @param {Object} userData - Registration data
+   * @returns {Promise<Object>} - Result object
+   */
+  async registerUser(userData) {
+    this._validateUserData(userData);
+    
+    const { userType } = userData;
+    const operations = [];
+    
+    // Determine which tables need updating based on user type
+    if (userType.includes('learner')) {  // Changed from student
+      operations.push(
+        this.db.createItem(TABLES.LEARNER, this._prepareLearnerItem(userData))  // Changed from STUDENT, _prepareStudentItem
+      );
+    }
+    
+    if (userType.includes('teacher')) {  // Changed from tutor
+      operations.push(
+        this.db.createItem(TABLES.TEACHER, this._prepareTeacherItem(userData))  // Changed from TUTOR, _prepareTutorItem
+      );
+    }
+    
+    // Run all database operations in parallel
+    await Promise.all(operations);
+    return { success: true, message: 'User registered successfully' };
+  }
+
+  /**
+   * Updates learner profile
+   * @param {Object} profileData - Profile data to update
+   * @returns {Promise<Object>} - Updated attributes
+   */
+  async updateLearnerProfile(profileData) {  // Changed from updateStudentProfile
+    const { email } = profileData;
+    
+    // Validate required email
+    if (!email) throw new Error('Email is required for profile updates');
+    
+    const updateParams = {
+      TableName: TABLES.LEARNER,  // Changed from STUDENT
+      Key: { id: email },
+      UpdateExpression: 'SET university = :u, program = :p, courses = :c, startyear = :s, endyear = :e',
+      ExpressionAttributeValues: {
+        ':u': profileData.university || '',
+        ':p': profileData.program || '',
+        ':c': profileData.courses || '',
+        ':s': profileData.startyear || '',
+        ':e': profileData.endyear || ''
+      },
+      ReturnValues: 'UPDATED_NEW'
+    };
+    
+    return this.db.updateItem(updateParams);
+  }
+
+  /**
+   * Updates teacher profile
+   * @param {Object} profileData - Profile data to update
+   * @returns {Promise<Object>} - Updated attributes
+   */
+  async updateTeacherProfile(profileData) {  // Changed from updateTutorProfile
+    const { email, skills } = profileData;
+    
+    // Validate required email
+    if (!email) throw new Error('Email is required for profile updates');
+    
+    const updateParams = {
+      TableName: TABLES.TEACHER,  // Changed from TUTOR
+      Key: { id: email },
+      UpdateExpression: 'SET skills = :s, expyears = :y, expdesc = :d',
+      ExpressionAttributeValues: {
+        ':s': profileData.skills || '',
+        ':y': profileData.expyears || '',
+        ':d': profileData.expdesc || ''
+      },
+      ReturnValues: 'UPDATED_NEW'
+    };
+    
+    const result = await this.db.updateItem(updateParams);
+    
+    // Update individual skills if provided as an array
+    if (Array.isArray(skills) && skills.length > 0) {
+      const skillUpdates = skills.map(skill => 
+        this.db.updateTeacherSkill(skill, email)  // Changed from updateTutorSkill
+      );
+      await Promise.all(skillUpdates);
+    }
+    
+    return result;
   }
 }
 
@@ -207,26 +249,59 @@ async function handleProfileUpdate(userData) {
  * Lambda function handler
  */
 exports.handler = async (event, context) => {
-  let body;
-  let statusCode = "200";
+  // Initialize services
+  const dbService = new DatabaseService();
+  const userService = new UserService(dbService);
 
   try {
-    body = JSON.parse(event.body);
-
-    if (body.register) {
-      await handleRegistration(body);
-    } else {
-      await handleProfileUpdate(body);
+    // Parse and validate request body
+    if (!event.body) {
+      return formatResponse(400, { 
+        error: 'Missing request body' 
+      });
     }
-  } catch (err) {
-    statusCode = "400";
-    body = { error: err.message || "Bad request" };
-    console.error("Error processing request:", err);
+    
+    const body = JSON.parse(event.body);
+    
+    // Handle the appropriate action
+    let result;
+    if (body.register === true) {
+      result = await userService.registerUser(body);
+    } else if (body.email) {
+      // Determine profile type and update accordingly
+      if (body.skills !== undefined) {
+        result = await userService.updateTeacherProfile(body);  // Changed from updateTutorProfile
+      } else {
+        result = await userService.updateLearnerProfile(body);  // Changed from updateStudentProfile
+      }
+    } else {
+      return formatResponse(400, { 
+        error: 'Invalid request: missing required fields' 
+      });
+    }
+    
+    return formatResponse(200, result);
+  } catch (error) {
+    console.error('Error processing request:', error);
+    
+    // Determine appropriate status code based on error type
+    const statusCode = error.message.includes('validation') ? 400 : 500;
+    const errorMessage = statusCode === 400 ? error.message : 'Internal server error';
+    
+    return formatResponse(statusCode, { error: errorMessage });
   }
+};
 
+/**
+ * Formats the API response with appropriate status code and CORS headers
+ * @param {number} statusCode - HTTP status code
+ * @param {Object} body - Response body
+ * @returns {Object} - Formatted response object
+ */
+function formatResponse(statusCode, body) {
   return {
     statusCode,
-    body: JSON.stringify(body),
     headers: CORS_HEADERS,
+    body: JSON.stringify(body)
   };
-};
+}
