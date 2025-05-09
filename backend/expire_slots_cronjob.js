@@ -1,72 +1,175 @@
-var AWS = require("aws-sdk");
-const s3 = new AWS.S3();
+'use strict';
 
+const AWS = require('aws-sdk');
+const moment = require('moment');
 
-AWS.config.update({
-    region: "eu-north-1"
+// Configuration constants
+const CONFIG = {
+  REGION: process.env.AWS_REGION || 'eu-north-1',
+  SLOTS_TABLE: 'slots',
+  STATUS_EXPIRED: 'EXPIRED',
+  BATCH_SIZE: 25  // Process in batches to avoid timeout
+};
+
+// Initialize AWS clients with proper configuration
+AWS.config.update({ region: CONFIG.REGION });
+const dynamoDB = new AWS.DynamoDB({
+  apiVersion: '2012-08-10'
 });
-const dynamo = new AWS.DynamoDB.DocumentClient();
-var dynamodb = new AWS.DynamoDB({
-    apiVersion: "2012-08-10"
-});
-//reference taken from - https://stackoverflow.com/questions/41915438/node-js-aws-dynamodb-updateitem
-async function updateItemDb(params) {
-    return new Promise(function(resolve, reject) {
-        dynamo.update(params, function(err, data) {
-            if (err) resolve(false);
-            else resolve(true);
-        });
-    });
+const docClient = new AWS.DynamoDB.DocumentClient();
+
+/**
+ * Updates a slot status in DynamoDB
+ * @param {string} slotId - The slot ID to update
+ * @param {string} status - New status value
+ * @returns {Promise<boolean>} - Success status
+ */
+async function updateSlotStatus(slotId, status) {
+  const params = {
+    TableName: CONFIG.SLOTS_TABLE,
+    Key: { 'id': slotId },
+    UpdateExpression: 'set slotstatus = :s',
+    ExpressionAttributeValues: { ':s': status },
+    ReturnValues: 'UPDATED_NEW'
+  };
+
+  try {
+    await docClient.update(params).promise();
+    console.log(`Updated slot ${slotId} to ${status}`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to update slot ${slotId}:`, error);
+    return false;
+  }
 }
 
-async function setExpiredSlotStatus() {
-        try {
-            var dateToday = new Date();
-            const is_before_date = (date1, date2) => date1 >= date2;
-            var hours = dateToday.getHours();
-            var minutes = dateToday.getMinutes();
-            if(hours-10<0) {
-             hours = '0'+hours;
-            }
-            var nowtime =hours+':'+minutes;
-                var params = {
-                    TableName: "slots"
-                };
-                //reference taken from - https://docs.aws.amazon.com/sdk-for-javascript/v2/developer-guide/dynamodb-example-query-scan.html
-                var result = await dynamodb.scan(params).promise();
-                console.log(JSON.stringify(result));
-                for (let i = 0; i < result.Items.length; i++) {
-                    var dateInDb = result.Items[i].date.S;
-                    var dd = dateInDb.split('-')[0];
-                    var mm = dateInDb.split('-')[1];
-                    var yyyy = dateInDb.split('-')[2];
-                    var isLessThanEqualToDate = is_before_date(new Date(dateToday.getFullYear(), dateToday.getMonth()+1, dateToday.getDate()), new Date(yyyy, mm, dd));
-                    var timeInDb = result.Items[i].endTime.S;
-                      var slotstatus = result.Items[i].slotstatus.S;
-                    
-                    if(isLessThanEqualToDate && timeInDb<nowtime ){
-                        console.log(dateInDb);
-                        console.log(timeInDb);
-                        const params = {
-                        TableName: "slots",
-                        Key: {
-                            "id": result.Items[i].id.S
-                        },
-                        UpdateExpression: "set slotstatus = :s",
-                        ExpressionAttributeValues: {
-                            ":s": 'EXPIRED'
-                        },
-                        ReturnValues: "UPDATED_NEW"
-                        };
-                        await updateItemDb(params);
-                    }
-                }
-            } catch (error) {
-                console.error(error);
-            }
+/**
+ * Gets all active slots from DynamoDB
+ * @returns {Promise<Array>} - Array of slot items
+ */
+async function getActiveSlots() {
+  // We could optimize this by using a GSI on slotstatus
+  // or by adding a filter expression to only get non-expired slots
+  const params = {
+    TableName: CONFIG.SLOTS_TABLE,
+    FilterExpression: 'slotstatus <> :expiredStatus',
+    ExpressionAttributeValues: {
+      ':expiredStatus': { S: CONFIG.STATUS_EXPIRED }
+    }
+  };
+
+  try {
+    // Handle pagination for large tables
+    let items = [];
+    let lastEvaluatedKey;
+    
+    do {
+      if (lastEvaluatedKey) {
+        params.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      
+      const result = await dynamoDB.scan(params).promise();
+      items = items.concat(result.Items || []);
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      
+    } while (lastEvaluatedKey);
+    
+    return items;
+  } catch (error) {
+    console.error('Error fetching slots:', error);
+    throw error;
+  }
 }
+
+/**
+ * Determines if a slot has expired based on date and time
+ * @param {string} slotDate - The slot date in YYYY-MM-DD format
+ * @param {string} slotEndTime - The slot end time in HH:mm format
+ * @returns {boolean} - Whether the slot has expired
+ */
+function isSlotExpired(slotDate, slotEndTime) {
+  // Create moment objects for comparisons
+  const now = moment();
+  
+  // Parse the slot date and time
+  const slotDateTime = moment(`${slotDate} ${slotEndTime}`, 'YYYY-MM-DD HH:mm');
+  
+  // A slot is expired if its end time is in the past
+  return now.isAfter(slotDateTime);
+}
+
+/**
+ * Main function to update expired slot statuses
+ * @returns {Promise<object>} - Summary of results
+ */
+async function updateExpiredSlots() {
+  console.log('Starting expired slots update process...');
+  
+  const results = {
+    processed: 0,
+    expired: 0,
+    failed: 0
+  };
+  
+  try {
+    // Get all active slots
+    const slots = await getActiveSlots();
+    results.processed = slots.length;
+    
+    console.log(`Processing ${slots.length} active slots`);
+    
+    // Process slots in batches to avoid timeout
+    for (let i = 0; i < slots.length; i++) {
+      const slot = slots[i];
+      const slotId = slot.id.S;
+      const slotDate = slot.date.S;
+      const slotEndTime = slot.endTime.S;
+      
+      if (isSlotExpired(slotDate, slotEndTime)) {
+        console.log(`Slot ${slotId} has expired (${slotDate} ${slotEndTime})`);
+        
+        const success = await updateSlotStatus(slotId, CONFIG.STATUS_EXPIRED);
+        if (success) {
+          results.expired++;
+        } else {
+          results.failed++;
+        }
+      }
+    }
+    
+    console.log(`Expired slots update complete: ${results.expired} slots expired, ${results.failed} updates failed`);
+    return results;
+  } catch (error) {
+    console.error('Error in updateExpiredSlots:', error);
+    throw error;
+  }
+}
+
+/**
+ * Lambda function handler for the cron job
+ */
 exports.handler = async (event, context) => {
-
-    console.log("Running CRON job!");
-    await setExpiredSlotStatus();
+  console.log('Starting expired slots cron job');
+  
+  try {
+    const results = await updateExpiredSlots();
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message: 'Expired slots processed successfully',
+        results
+      })
+    };
+  } catch (error) {
+    console.error('Cron job failed:', error);
+    
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        message: 'Error processing expired slots',
+        error: error.message
+      })
+    };
+  }
 };
