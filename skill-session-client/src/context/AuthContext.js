@@ -1,115 +1,91 @@
-import { createContext, useEffect, useState } from 'react';
-import AuthService from '../services/authService';
+// src/context/AuthContext.js
+import { CognitoUser, CognitoUserPool } from 'amazon-cognito-identity-js';
+import { createContext, useContext, useEffect, useState } from 'react';
+import poolDetails from '../config/cognito-config.json';
 
-// Create the context
-export const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  // Auth state
-  const [authState, setAuthState] = useState({
+  const [auth, setAuth] = useState({
     isAuthenticated: false,
-    isLoading: true,
-    user: null,
+    username: null,
+    firstName: null,
+    lastName: null,
+    mobileNo: null,
+    userType: null,
+    isTutor: false,
+    isStudent: false,
     profileType: null,
   });
 
-  // Initialize auth state on component mount
+  // Load auth state from localStorage on app initialization
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const isAuthenticated = AuthService.isAuthenticated();
-        
-        if (isAuthenticated) {
-          const username = localStorage.getItem('username');
-          const userType = localStorage.getItem('userType');
-          
-          setAuthState({
-            isAuthenticated: true,
-            isLoading: false,
-            user: {
-              username,
-              userType,
-              isTutor: localStorage.getItem('tutor') !== null,
-              isStudent: localStorage.getItem('student') !== null,
-            },
-            profileType: localStorage.getItem('profileType') || null,
-          });
-        } else {
-          setAuthState({
-            isAuthenticated: false,
-            isLoading: false,
-            user: null,
-            profileType: null,
-          });
-        }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-        setAuthState({
-          isAuthenticated: false,
-          isLoading: false,
-          user: null,
-          profileType: null,
-        });
-      }
-    };
-
-    initializeAuth();
+    const token = localStorage.getItem('token');
+    if (token) {
+      setAuth({
+        isAuthenticated: true,
+        username: localStorage.getItem('username'),
+        firstName: localStorage.getItem('firstnameCloud'),
+        lastName: localStorage.getItem('lastnameCloud'),
+        mobileNo: localStorage.getItem('mobilenoCloud'),
+        userType: localStorage.getItem('userType'),
+        isTutor: localStorage.getItem('tutor') === 'tutor',
+        isStudent: localStorage.getItem('student') === 'student',
+        profileType: localStorage.getItem('tutor') === 'tutor' ? 'tutor' : 'student'
+      });
+    }
   }, []);
 
-  const login = async (email, password) => {
-    try {
-      await AuthService.signIn(email, password);
-      
-      const username = localStorage.getItem('username');
-      const userType = localStorage.getItem('userType');
-      
-      setAuthState({
-        isAuthenticated: true,
-        isLoading: false,
-        user: {
-          username,
-          userType,
-          isTutor: localStorage.getItem('tutor') !== null,
-          isStudent: localStorage.getItem('student') !== null,
-        },
-        profileType: null,
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('Login error:', error);
-      return false;
-    }
-  };
-
-  const logout = () => {
-    AuthService.signOut();
-    setAuthState({
+  const logoutUser = () => {
+    const userPool = new CognitoUserPool(poolDetails);
+    const cognitoUser = new CognitoUser({
+      Username: auth.username,
+      Pool: userPool
+    });
+    
+    cognitoUser.signOut();
+    
+    // Clear localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('firstnameCloud');
+    localStorage.removeItem('lastnameCloud');
+    localStorage.removeItem('mobilenoCloud');
+    localStorage.removeItem('userType');
+    localStorage.removeItem('tutor');
+    localStorage.removeItem('student');
+    
+    // Reset auth state
+    setAuth({
       isAuthenticated: false,
-      isLoading: false,
-      user: null,
-      profileType: null,
+      username: null,
+      firstName: null,
+      lastName: null,
+      mobileNo: null,
+      userType: null,
+      isTutor: false,
+      isStudent: false,
+      profileType: null
     });
   };
 
   const setProfileType = (type) => {
-    localStorage.setItem('profileType', type);
-    setAuthState({
-      ...authState,
-      profileType: type,
-    });
+    setAuth(prev => ({
+      ...prev,
+      profileType: type
+    }));
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        ...authState,
-        login,
-        logout,
-        setProfileType,
-      }}
-    >
+    <AuthContext.Provider value={{ 
+      auth, 
+      setAuth, 
+      logoutUser,
+      setProfileType
+    }}>
       {children}
     </AuthContext.Provider>
   );
 };
+
+export const useAuth = () => useContext(AuthContext);

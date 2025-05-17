@@ -1,65 +1,69 @@
+// src/features/auth/components/SignInForm.js
 import { Field, Form, Formik } from 'formik';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import * as Yup from 'yup';
-import { useAuth } from '../../../hooks/useAuth';
+import { useAuth } from '../../../context/AuthContext';
+import { authService } from '../services/authService';
 
-// Validation schema
 const validationSchema = Yup.object().shape({
   email: Yup.string()
-    .email('Invalid email format')
+    .email('Invalid email address')
     .required('Email is required'),
   password: Yup.string()
-    .required('Password is required'),
+    .required('Password is required')
 });
 
-const SigninForm = () => {
+const SignInForm = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
-
-  const initialValues = {
-    email: '',
-    password: '',
-  };
+  const { setAuth } = useAuth();
 
   const handleSubmit = async (values, { setSubmitting }) => {
     try {
-      const success = await login(values.email, values.password);
+      const result = await authService.signIn(values.email, values.password);
       
-      if (success) {
-        toast.success('Login successful');
-        navigate('/home');
-      } else {
-        toast.error('Login failed');
-      }
+      setAuth({
+        isAuthenticated: true,
+        username: result.getIdToken().payload.email,
+        firstName: result.getIdToken().payload.given_name,
+        lastName: result.getIdToken().payload.family_name,
+        mobileNo: result.getIdToken().payload.phone_number,
+        userType: result.getIdToken().payload['custom:userType'],
+        isTutor: result.getIdToken().payload['custom:userType'].includes('tutor'),
+        isStudent: result.getIdToken().payload['custom:userType'].includes('student'),
+        profileType: result.getIdToken().payload['custom:userType'].includes('tutor') 
+          ? 'tutor' : 'student'
+      });
+      
+      toast.success('Successfully signed in!');
+      navigate('/home');
     } catch (error) {
-      toast.error(error.message || 'Login failed');
+      toast.error(error.message || 'Failed to sign in');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="signup-container">
-      <h3>Sign In</h3>
+    <div className="auth-form-container">
+      <h2>Sign In</h2>
       <Formik
-        initialValues={initialValues}
+        initialValues={{ email: '', password: '' }}
         validationSchema={validationSchema}
         onSubmit={handleSubmit}
       >
-        {({ errors, touched, isValid, dirty }) => (
+        {({ isSubmitting, errors, touched }) => (
           <Form>
             <div className="form-group">
               <label htmlFor="email">Email</label>
               <Field
                 type="email"
-                className="form-control"
-                id="email"
                 name="email"
-                placeholder="Enter email"
+                className={`form-control ${errors.email && touched.email ? 'is-invalid' : ''}`}
+                placeholder="Enter your email"
               />
               {errors.email && touched.email && (
-                <small className="error">{errors.email}</small>
+                <div className="invalid-feedback">{errors.email}</div>
               )}
             </div>
 
@@ -67,29 +71,33 @@ const SigninForm = () => {
               <label htmlFor="password">Password</label>
               <Field
                 type="password"
-                className="form-control"
-                id="password"
                 name="password"
-                placeholder="Enter password"
+                className={`form-control ${errors.password && touched.password ? 'is-invalid' : ''}`}
+                placeholder="Enter your password"
               />
               {errors.password && touched.password && (
-                <small className="error">{errors.password}</small>
+                <div className="invalid-feedback">{errors.password}</div>
               )}
             </div>
 
-            <div className="form-group">
-              <Link to="/forgetpassword">Forgot Password?</Link>
-            </div>
-
-            <center>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={!(dirty && isValid)}
+            <div className="form-group mt-3 text-center">
+              <button 
+                type="submit" 
+                className="btn btn-primary w-100" 
+                disabled={isSubmitting}
               >
-                Sign In
+                {isSubmitting ? 'Signing in...' : 'Sign In'}
               </button>
-            </center>
+            </div>
+            
+            <div className="mt-3 text-center">
+              <p>
+                <a href="/forgetpassword">Forgot password?</a>
+              </p>
+              <p>
+                Don't have an account? <a href="/signup">Sign up</a>
+              </p>
+            </div>
           </Form>
         )}
       </Formik>
@@ -97,4 +105,4 @@ const SigninForm = () => {
   );
 };
 
-export default SigninForm;
+export default SignInForm;
