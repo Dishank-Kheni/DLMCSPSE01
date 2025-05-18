@@ -1,91 +1,136 @@
-// src/context/AuthContext.js
-import { CognitoUser, CognitoUserPool } from 'amazon-cognito-identity-js';
 import { createContext, useContext, useEffect, useState } from 'react';
-import poolDetails from '../config/cognito-config.json';
+import authService from '../features/auth/services/authService';
 
-const AuthContext = createContext(null);
+// Create the context
+const AuthContext = createContext();
+
+// Create a custom hook to use the auth context
+export const useAuth = () => {
+  return useContext(AuthContext);
+};
 
 export const AuthProvider = ({ children }) => {
   const [auth, setAuth] = useState({
     isAuthenticated: false,
-    username: null,
-    firstName: null,
-    lastName: null,
-    mobileNo: null,
-    userType: null,
+    isLoading: true,
+    username: '',
+    firstName: '',
+    lastName: '',
+    mobileNo: '',
+    userType: '',
     isTutor: false,
     isStudent: false,
-    profileType: null,
+    profileType: '', // 'tutor' or 'student' for users with both roles
+    profilePic: ''
   });
 
-  // Load auth state from localStorage on app initialization
+  // On component mount, check if user is already logged in
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      setAuth({
-        isAuthenticated: true,
-        username: localStorage.getItem('username'),
-        firstName: localStorage.getItem('firstnameCloud'),
-        lastName: localStorage.getItem('lastnameCloud'),
-        mobileNo: localStorage.getItem('mobilenoCloud'),
-        userType: localStorage.getItem('userType'),
-        isTutor: localStorage.getItem('tutor') === 'tutor',
-        isStudent: localStorage.getItem('student') === 'student',
-        profileType: localStorage.getItem('tutor') === 'tutor' ? 'tutor' : 'student'
-      });
-    }
+    const checkAuthStatus = async () => {
+      try {
+        // Try to get current session
+        const session = await authService.getCurrentSession();
+        
+        if (session) {
+          const userInfo = session.getIdToken().payload;
+          
+          // Set user data from token
+          setAuth({
+            isAuthenticated: true,
+            isLoading: false,
+            username: userInfo.email,
+            firstName: userInfo.given_name || '',
+            lastName: userInfo.family_name || '',
+            mobileNo: userInfo.phone_number || '',
+            userType: userInfo['custom:userType'] || '',
+            isTutor: userInfo['custom:userType']?.includes('tutor') || false,
+            isStudent: userInfo['custom:userType']?.includes('student') || false,
+            profileType: userInfo['custom:userType']?.includes('tutor') ? 'tutor' : 'student',
+            profilePic: ''
+          });
+          
+          // Try to get profile picture if available
+          try {
+            const profileImg = await authService.getProfileImage(userInfo.email);
+            if (profileImg) {
+              setAuth(prev => ({...prev, profilePic: profileImg}));
+            }
+          } catch (error) {
+            console.error('Failed to load profile image:', error);
+          }
+        } else {
+          setAuth(prev => ({...prev, isAuthenticated: false, isLoading: false}));
+        }
+      } catch (error) {
+        console.error('Auth status check failed:', error);
+        setAuth(prev => ({...prev, isAuthenticated: false, isLoading: false}));
+      }
+    };
+
+    checkAuthStatus();
   }, []);
 
-  const logoutUser = () => {
-    const userPool = new CognitoUserPool(poolDetails);
-    const cognitoUser = new CognitoUser({
-      Username: auth.username,
-      Pool: userPool
-    });
-    
-    cognitoUser.signOut();
-    
-    // Clear localStorage
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('firstnameCloud');
-    localStorage.removeItem('lastnameCloud');
-    localStorage.removeItem('mobilenoCloud');
-    localStorage.removeItem('userType');
-    localStorage.removeItem('tutor');
-    localStorage.removeItem('student');
-    
-    // Reset auth state
+  // Login function
+  const login = async (userData) => {
     setAuth({
-      isAuthenticated: false,
-      username: null,
-      firstName: null,
-      lastName: null,
-      mobileNo: null,
-      userType: null,
-      isTutor: false,
-      isStudent: false,
-      profileType: null
+      isAuthenticated: true,
+      isLoading: false,
+      username: userData.username,
+      firstName: userData.firstName || '',
+      lastName: userData.lastName || '',
+      mobileNo: userData.mobileNo || '',
+      userType: userData.userType || '',
+      isTutor: userData.userType?.includes('tutor') || false,
+      isStudent: userData.userType?.includes('student') || false,
+      profileType: userData.profileType || (userData.userType?.includes('tutor') ? 'tutor' : 'student'),
+      profilePic: userData.profilePic || ''
     });
   };
 
+  // Logout function
+  const logoutUser = async () => {
+    try {
+      await authService.signOut();
+      
+      // Reset auth state
+      setAuth({
+        isAuthenticated: false,
+        isLoading: false,
+        username: '',
+        firstName: '',
+        lastName: '',
+        mobileNo: '',
+        userType: '',
+        isTutor: false,
+        isStudent: false,
+        profileType: '',
+        profilePic: ''
+      });
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  // Function to set profile type (for users who are both tutor and student)
   const setProfileType = (type) => {
-    setAuth(prev => ({
-      ...prev,
-      profileType: type
-    }));
+    if (type === 'tutor' || type === 'student') {
+      setAuth(prev => ({...prev, profileType: type}));
+    }
+  };
+
+  // The value that will be provided to consumers of this context
+  const value = {
+    auth: {
+      ...auth,
+      setProfileType
+    },
+    login,
+    logoutUser
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      auth, 
-      setAuth, 
-      logoutUser,
-      setProfileType
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);

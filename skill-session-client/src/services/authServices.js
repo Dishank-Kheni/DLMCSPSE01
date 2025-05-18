@@ -1,135 +1,140 @@
-// src/features/auth/services/authService.js
-import {
-    AuthenticationDetails,
-    CognitoUser,
-    CognitoUserAttribute,
-    CognitoUserPool
-} from 'amazon-cognito-identity-js';
-import poolDetails from '../../../config/cognito-config.json';
+import { Auth } from 'aws-amplify';
+import api from '../../../services/api';
 
-const userPool = new CognitoUserPool(poolDetails);
+const authService = {
+  // Sign in
+  signIn: async (email, password) => {
+    try {
+      const user = await Auth.signIn(email, password);
+      return user;
+    } catch (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
+  },
 
-export const authService = {
-  // Sign up a new user
-  signUp: (userData) => {
-    return new Promise((resolve, reject) => {
-      const attributeList = [
-        new CognitoUserAttribute({ Name: 'given_name', Value: userData.firstName }),
-        new CognitoUserAttribute({ Name: 'family_name', Value: userData.lastName }),
-        new CognitoUserAttribute({ Name: 'phone_number', Value: userData.mobileNo }),
-        new CognitoUserAttribute({ Name: 'custom:userType', Value: userData.userType })
-      ];
+  // Sign up
+  signUp: async (userData) => {
+    try {
+      const { email, password, firstName, lastName, mobileNo, userType } = userData;
+      
+      const result = await Auth.signUp({
+        username: email,
+        password,
+        attributes: {
+          email,
+          given_name: firstName,
+          family_name: lastName,
+          phone_number: mobileNo,
+          'custom:userType': userType
+        }
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Sign up error:', error);
+      throw error;
+    }
+  },
 
-      userPool.signUp(
-        userData.email,
-        userData.password,
-        attributeList,
-        null,
-        (err, result) => {
+  // Verify account
+  verifyAccount: async (email, code) => {
+    try {
+      const result = await Auth.confirmSignUp(email, code);
+      return result;
+    } catch (error) {
+      console.error('Verify account error:', error);
+      throw error;
+    }
+  },
+
+  // Forgot password
+  forgotPassword: async (email) => {
+    try {
+      const result = await Auth.forgotPassword(email);
+      return result;
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      throw error;
+    }
+  },
+
+  // Reset password
+  resetPassword: async (email, code, newPassword) => {
+    try {
+      const result = await Auth.forgotPasswordSubmit(email, code, newPassword);
+      return result;
+    } catch (error) {
+      console.error('Reset password error:', error);
+      throw error;
+    }
+  },
+
+  // Sign out
+  signOut: async () => {
+    try {
+      await Auth.signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+      throw error;
+    }
+  },
+
+  // Get current session
+  getCurrentSession: async () => {
+    try {
+      const session = await Auth.currentSession();
+      return session;
+    } catch (error) {
+      if (error !== 'No current user') {
+        console.error('Get current session error:', error);
+      }
+      return null;
+    }
+  },
+
+  // Get current authenticated user
+  getCurrentUser: async () => {
+    try {
+      const user = await Auth.currentAuthenticatedUser();
+      return user;
+    } catch (error) {
+      console.error('Get current user error:', error);
+      return null;
+    }
+  },
+
+  // Refresh session
+  refreshSession: async () => {
+    try {
+      const cognitoUser = await Auth.currentAuthenticatedUser();
+      const currentSession = await Auth.currentSession();
+      
+      cognitoUser.refreshSession(
+        currentSession.getRefreshToken(),
+        (err, session) => {
           if (err) {
-            reject(err);
-          } else {
-            localStorage.setItem('username', userData.email);
-            resolve(result);
+            throw err;
           }
+          return session;
         }
       );
-    });
+    } catch (error) {
+      console.error('Refresh session error:', error);
+      throw error;
+    }
   },
 
-  // Sign in user
-  signIn: (email, password) => {
-    return new Promise((resolve, reject) => {
-      const authenticationDetails = new AuthenticationDetails({
-        Username: email,
-        Password: password
-      });
-
-      const cognitoUser = new CognitoUser({
-        Username: email,
-        Pool: userPool
-      });
-
-      cognitoUser.authenticateUser(authenticationDetails, {
-        onSuccess: (result) => {
-          // Store user data in local storage
-          localStorage.setItem('token', result.getIdToken().getJwtToken());
-          localStorage.setItem('username', result.getIdToken().payload.email);
-          localStorage.setItem('firstnameCloud', result.getIdToken().payload.given_name);
-          localStorage.setItem('lastnameCloud', result.getIdToken().payload.family_name);
-          localStorage.setItem('mobilenoCloud', result.getIdToken().payload.phone_number);
-          localStorage.setItem('userType', result.getIdToken().payload['custom:userType']);
-          
-          // Set user type based on custom attribute
-          if (result.getIdToken().payload['custom:userType'].includes('tutor')) {
-            localStorage.setItem('tutor', 'tutor');
-          }
-          if (result.getIdToken().payload['custom:userType'].includes('student')) {
-            localStorage.setItem('student', 'student');
-          }
-          
-          resolve(result);
-        },
-        onFailure: (err) => {
-          reject(err);
-        }
-      });
-    });
-  },
-
-  // Verify user account
-  verifyAccount: (email, code) => {
-    return new Promise((resolve, reject) => {
-      const cognitoUser = new CognitoUser({
-        Username: email,
-        Pool: userPool
-      });
-
-      cognitoUser.confirmRegistration(code, true, (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      });
-    });
-  },
-
-  // Request password reset
-  forgotPassword: (email) => {
-    return new Promise((resolve, reject) => {
-      const cognitoUser = new CognitoUser({
-        Username: email,
-        Pool: userPool
-      });
-
-      cognitoUser.forgotPassword({
-        onSuccess: (data) => {
-          resolve(data);
-        },
-        onFailure: (err) => {
-          reject(err);
-        }
-      });
-    });
-  },
-
-  // Reset password with code
-  resetPassword: (email, code, newPassword) => {
-    return new Promise((resolve, reject) => {
-      const cognitoUser = new CognitoUser({
-        Username: email,
-        Pool: userPool
-      });
-
-      cognitoUser.confirmPassword(code, newPassword, {
-        onSuccess: () => {
-          resolve();
-        },
-        onFailure: (err) => {
-          reject(err);
-        }
-      });
-    });
+  // Get profile image
+  getProfileImage: async (username) => {
+    try {
+      const response = await api.get(`/get-profile-img?id=${username}`);
+      return response.data;
+    } catch (error) {
+      console.error('Get profile image error:', error);
+      return null;
+    }
   }
 };
+
+export default authService;

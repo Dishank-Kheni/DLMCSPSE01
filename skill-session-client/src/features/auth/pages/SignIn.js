@@ -1,9 +1,8 @@
 // src/features/auth/pages/SignIn.js
-import React from 'react';
-import { Link } from 'react-router-dom';
 import { Card, Typography } from 'antd';
-import SignInForm from '../components/SignInForm';
+import { Link } from 'react-router-dom';
 import '../styles/Auth.css';
+import SignInForm from './components/SignInForm';
 
 const { Title, Paragraph } = Typography;
 

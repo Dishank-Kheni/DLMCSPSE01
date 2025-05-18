@@ -1,0 +1,199 @@
+/* src/features/dashboard/styles/Dashboard.css */
+.dashboard-container {
+  width: 100%;
+}
+
+/* Hero Section */
+.hero-section {
+  padding: 60px 0;
+  background-color: #f5f7fa;
+  border-radius: 12px;
+  margin-bottom: 40px;
+}
+
+.hero-content {
+  padding: 20px;
+}
+
+.hero-text {
+  font-size: 18px;
+  margin-bottom: 30px;
+  color: #555;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+}
+
+.hero-image-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.hero-image {
+  max-width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Stats Section */
+.stats-section {
+  margin-bottom: 60px;
+}
+
+/* Features Section */
+.features-section {
+  padding: 60px 0;
+  background-color: #f9f9f9;
+  margin-bottom: 60px;
+}
+
+.section-title {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.feature-card {
+  height: 100%;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.feature-icon-wrapper {
+  margin-bottom: 20px;
+}
+
+.feature-icon {
+  font-size: 48px;
+  color: #1890ff;
+}
+
+/* How It Works Section */
+.how-it-works-section {
+  padding: 60px 0;
+  margin-bottom: 60px;
+}
+
+.step-card {
+  text-align: center;
+  padding: 30px;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+  height: 100%;
+  position: relative;
+  transition: all 0.3s;
+}
+
+.step-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.step-number {
+  width: 40px;
+  height: 40px;
+  background-color: #1890ff;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+  font-weight: bold;
+  margin: 0 auto 20px;
+}
+
+.cta-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+/* Testimonials Section */
+.testimonials-section {
+  padding: 60px 0;
+  background-color: #f5f7fa;
+  margin-bottom: 60px;
+}
+
+.testimonial-card {
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.testimonial-content {
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.testimonial-text {
+  font-size: 18px;
+  font-style: italic;
+  margin-bottom: 20px;
+  color: #555;
+}
+
+.testimonial-author {
+  font-size: 16px;
+}
+
+.testimonial-role {
+  color: #888;
+  margin-top: 5px;
+}
+
+/* Sign Up CTA Section */
+.signup-cta-section {
+  padding: 60px;
+  background-color: #e6f7ff;
+  border-radius: 12px;
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.cta-text {
+  font-size: 18px;
+  max-width: 700px;
+  margin: 0 auto 30px;
+  color: #555;
+}
+
+.cta-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .hero-buttons,
+  .cta-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .signup-cta-section {
+    padding: 40px 20px;
+  }
+  
+  .hero-section {
+    padding: 40px 20px;
+  }
+  
+  .feature-card,
+  .step-card {
+    margin-bottom: 20px;
+  }
+}

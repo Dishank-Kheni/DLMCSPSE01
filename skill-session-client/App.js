@@ -11,7 +11,8 @@ import { AuthProvider } from './context/AuthContext';
 import Footer from './components/layout/Footer';
 import Header from './components/layout/Header';
 
-// Route Guards
+// Common Components
+import ErrorBoundary from './components/common/ErrorBoundary';
 import PrivateRoute from './components/common/PrivateRoute';
 import PublicRoute from './components/common/PublicRoute';
 
@@ -36,45 +37,48 @@ import TutorDashboard from './features/tutor/pages/TutorDashboard';
 
 const App = () => {
   return (
-    <AuthProvider>
-      <Router>
-        <ToastContainer position="top-right" autoClose={3000} />
-        <Header />
-        <main className="container">
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<PublicRoute />}>
-              <Route index element={<Dashboard />} />
-              <Route path="signin" element={<SignIn />} />
-              <Route path="signup" element={<SignUp />} />
-              <Route path="verifyaccount" element={<VerifyAccount />} />
-              <Route path="forgetpassword" element={<ForgotPassword />} />
-              <Route path="resetpassword" element={<ResetPassword />} />
-            </Route>
-            
-            {/* Protected Routes */}
-            <Route path="/" element={<PrivateRoute />}>
-              <Route path="home" element={<Home />} />
-              <Route path="profile" element={<Profile />} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <ToastContainer position="top-right" autoClose={3000} />
+          <Header />
+          <main className="container">
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/" element={<PublicRoute />}>
+                <Route index element={<Dashboard />} />
+                <Route path="signin" element={<SignIn />} />
+                <Route path="signup" element={<SignUp />} />
+                <Route path="verifyaccount" element={<VerifyAccount />} />
+                <Route path="forgetpassword" element={<ForgotPassword />} />
+                <Route path="resetpassword" element={<ResetPassword />} />
+              </Route>
               
-              {/* Tutor Routes */}
-              <Route path="tutor" element={<TutorDashboard />} />
-              <Route path="tutor/availability" element={<TutorAvailability />} />
-              <Route path="tutor/bookings" element={<TutorBookings />} />
-              
-              {/* Student Routes */}
-              <Route path="student" element={<StudentDashboard />} />
+              {/* Protected Routes */}
+              <Route path="/" element={<PrivateRoute />}>
+                <Route path="home" element={<Home />} />
+                <Route path="profile" element={<Profile />} />
+                
+                {/* Tutor Routes */}
+                <Route path="tutor" element={<TutorDashboard />} />
+                <Route path="tutor/availability" element={<TutorAvailability />} />
+                <Route path="tutor/bookings" element={<TutorBookings />} />
+                
+                {/* Student Routes */}
+                <Route path="student" element={<StudentDashboard />} />
                 <Route path="student/find-tutors" element={<TutorList />} />
-                <Route path="student/tutor/:tutorId" element={<TutorDetails />} />  
+                <Route path="student/tutor/:tutorId" element={<TutorDetails />} />
                 <Route path="student/bookings" element={<StudentBookings />} />
-              {/* Fallback route */}
-              <Route path="*" element={<Navigate to="/home" />} />
-            </Route>
-          </Routes>
-        </main>
-        <Footer />
-      </Router>
-    </AuthProvider>
+                
+                {/* Fallback route */}
+                <Route path="*" element={<Navigate to="/home" />} />
+              </Route>
+            </Routes>
+          </main>
+          <Footer />
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };
 

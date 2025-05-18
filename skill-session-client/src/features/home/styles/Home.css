@@ -1,0 +1,36 @@
+/* src/features/home/styles/Home.css */
+.home-container {
+  padding: 20px 0;
+}
+
+.welcome-section {
+  margin-bottom: 30px;
+}
+
+.main-card,
+.dashboard-card,
+.switch-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  height: 100%;
+}
+
+.session-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quick-actions,
+.switch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 0;
+}
