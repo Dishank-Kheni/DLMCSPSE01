@@ -1,0 +1,46 @@
+/* src/features/student/styles/StudentDashboard.css */
+.student-dashboard {
+  padding: 20px 0;
+}
+
+.dashboard-header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.dashboard-cards {
+  margin-bottom: 30px;
+}
+
+.dashboard-card {
+  height: 100%;
+  transition: all 0.3s;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.card-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 15px;
+  color: #1890ff;
+}
+
+.card-text h4 {
+  margin-bottom: 10px;
+}
+
+.dashboard-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}

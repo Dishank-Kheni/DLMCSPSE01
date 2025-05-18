@@ -26,7 +26,10 @@ import VerifyAccount from './features/auth/pages/VerifyAccount';
 import Dashboard from './features/dashboard/pages/Dashboard';
 import Home from './features/home/pages/Home';
 import Profile from './features/profile/pages/Profile';
+import StudentBookings from './features/student/pages/StudentBookings';
 import StudentDashboard from './features/student/pages/StudentDashboard';
+import TutorDetails from './features/student/pages/TutorDetails';
+import TutorList from './features/student/pages/TutorList';
 import TutorAvailability from './features/tutor/pages/TutorAvailability';
 import TutorBookings from './features/tutor/pages/TutorBookings';
 import TutorDashboard from './features/tutor/pages/TutorDashboard';
@@ -61,7 +64,9 @@ const App = () => {
               
               {/* Student Routes */}
               <Route path="student" element={<StudentDashboard />} />
-              
+                <Route path="student/find-tutors" element={<TutorList />} />
+                <Route path="student/tutor/:tutorId" element={<TutorDetails />} />  
+                <Route path="student/bookings" element={<StudentBookings />} />
               {/* Fallback route */}
               <Route path="*" element={<Navigate to="/home" />} />
             </Route>

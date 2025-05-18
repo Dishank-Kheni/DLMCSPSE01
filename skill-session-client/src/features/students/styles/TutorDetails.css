@@ -1,0 +1,90 @@
+/* src/features/student/styles/TutorDetails.css */
+.tutor-details-container {
+  padding: 20px 0;
+}
+
+.back-button {
+  margin-bottom: 20px;
+}
+
+.tutor-profile-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.tutor-avatar-container {
+  margin-right: 30px;
+}
+
+.tutor-avatar {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #f0f0f0;
+}
+
+.tutor-info {
+  flex: 1;
+}
+
+.tutor-meta {
+  margin: 10px 0;
+}
+
+.tutor-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.tutor-about {
+  margin-bottom: 30px;
+}
+
+.calendar-container {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.calendar-slots {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-slots li {
+  margin-bottom: 3px;
+}
+
+.slot-selection {
+  margin-top: 10px;
+}
+
+.slot-button {
+  height: auto;
+  padding: 10px;
+  text-align: left;
+}
+
+.slot-button.selected {
+  background-color: #e6f7ff;
+  border-color: #1890ff;
+}
+
+.no-slots {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 0;
+}
