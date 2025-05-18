@@ -1,7 +1,3 @@
-Dishank-Kheni: could you write a good read me file for this landa backend?
-
-Workspace: Collecting workspace information# SkillSession Backend API
-
 A serverless backend implementation for the SkillSession tutoring platform built with AWS Lambda, DynamoDB, and API Gateway.
 
 ## Overview
