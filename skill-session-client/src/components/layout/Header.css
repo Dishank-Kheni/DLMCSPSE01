@@ -1,0 +1,77 @@
+/* src/components/layout/Header.css */
+.app-header {
+  background-color: #fff;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: 64px;
+  line-height: 64px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100%;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  height: 32px;
+  margin-right: 10px;
+}
+
+.logo-text {
+  color: #1890ff;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.nav-container {
+  display: flex;
+  align-items: center;
+}
+
+.main-menu {
+  background: transparent;
+  border-bottom: none;
+  margin-right: 20px;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0 8px;
+}
+
+.user-avatar {
+  margin-right: 8px;
+}
+
+.auth-buttons .ant-btn {
+  margin-left: 8px;
+}
+
+/* Responsive styles */
+.mobile-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .desktop-nav {
+    display: none;
+  }
+  
+  .mobile-nav {
+    display: block;
+  }
+}
