@@ -1,14 +1,11 @@
-## License
-
-ISC
-
 A modern React-based client application for the SkillSession tutoring platform that connects students with qualified tutors for online learning sessions.
 
 ## Overview
 
 SkillSession is a comprehensive online tutoring platform that facilitates connections between students seeking academic help and tutors offering their expertise. This client application provides an intuitive interface for users to register, search for tutors by skills, schedule sessions, manage bookings, and maintain their profiles.
 
-![SkillSession Platform](https://via.placeholder.com/800x400?text=SkillSession+Platform)
+## Platform access url
+Frontend server link: http://production-skillsession.eba-pmeitjcn.eu-north-1.elasticbeanstalk.com
 
 ## Features
 
@@ -132,14 +129,6 @@ amplify init
 amplify add hosting
 amplify publish
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## License
 
