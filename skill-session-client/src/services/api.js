@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_URL } from '../config/api-endpoints';
+import { API_BASE_URL } from '../config/constants';
 import authService from '../features/auth/services/authService';
 
 // Create an axios instance with default config

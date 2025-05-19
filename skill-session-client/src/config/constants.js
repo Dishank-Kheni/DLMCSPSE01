@@ -38,3 +38,6 @@ export const USER_TYPE = {
   TUTOR: 'tutor',
   STUDENT: 'student',
 };
+
+
+export const API_BASE_URL = 'https://cj7g8r0lhl.execute-api.eu-north-1.amazonaws.com/Production'; // Update this to your actual API base URL

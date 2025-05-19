@@ -62,11 +62,12 @@ Frontend server link: http://production-skillsession.eba-pmeitjcn.eu-north-1.ela
    ```
 
 3. Configure environment variables:
-   Create a `.env` file in the root directory with the following variables:
+   changes respective credential to 
+   src/config/
    ```
-   REACT_APP_API_ENDPOINT=https://your-api-gateway-url.amazonaws.com/prod
-   REACT_APP_USER_POOL_ID=your-cognito-user-pool-id
-   REACT_APP_USER_POOL_WEB_CLIENT_ID=your-cognito-client-id
+   API_BASE_URL=https://your-api-gateway-url.amazonaws.com/prod
+   UserPoolId=your-cognito-user-pool-id
+   ClientId=your-cognito-client-id
    ```
 
 4. Start the development server:
