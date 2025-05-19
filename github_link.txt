@@ -1,0 +1,13 @@
+github link: https://github.com/Dishank-Kheni/pse_myproject
+
+Frontend server link: http://production-skillsession.eba-pmeitjcn.eu-north-1.elasticbeanstalk.com
+
+login credential:
+
+Teacher login:
+email: dishankkheni224@gmail.com
+Password: Dishank@123
+
+Student login:
+email: davidstu@yopmail.com
+password: Dishank@123
